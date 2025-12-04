@@ -8,6 +8,8 @@ import Dashboard from "@/pages/dashboard";
 import AuthPage from "@/pages/auth";
 import ExpensesPage from "@/pages/expenses";
 import RewardsPage from "@/pages/rewards";
+import SettingsPage from "@/pages/settings";
+import ReportsPage from "@/pages/reports";
 
 function Router() {
   return (
@@ -16,6 +18,8 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/expenses" component={ExpensesPage} />
       <Route path="/rewards" component={RewardsPage} />
+      <Route path="/reports" component={ReportsPage} />
+      <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -6,7 +6,8 @@ import {
   Trophy, 
   Settings, 
   Menu, 
-  LogOut 
+  LogOut,
+  FileBarChart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -17,6 +18,7 @@ const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
   { icon: Wallet, label: "Expenses", href: "/expenses" },
   { icon: Trophy, label: "Rewards", href: "/rewards" },
+  { icon: FileBarChart, label: "Reports", href: "/reports" },
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
