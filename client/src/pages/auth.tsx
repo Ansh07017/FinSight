@@ -5,25 +5,73 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { auth } from "@/lib/api";
 import authBg from "@assets/generated_images/dark_minimalist_abstract_geometric_financial_background.png";
 import logoImg from "@assets/generated_images/minimalist_mint_green_rupee_logo_symbol.png";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [activeTab, setActiveTab] = useState("login");
+  
+  // Login form
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  
+  // Register form
+  const [registerUsername, setRegisterUsername] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Mock login delay
-    setTimeout(() => {
+    
+    try {
+      await auth.login(loginUsername, loginPassword);
+      
+      // Check if user has completed onboarding
+      try {
+        const profileData = await auth.me();
+        // In a real app, we'd check if they have a profile
+        setLocation("/onboarding");
+      } catch {
+        setLocation("/onboarding");
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Login Failed",
+        description: error.message || "Invalid credentials",
+      });
+    } finally {
       setIsLoading(false);
-      // Redirect to onboarding for new user simulation, or dashboard for returning
-      // For this prototype, let's show onboarding flow
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    
+    try {
+      await auth.register(registerUsername, registerPassword);
+      toast({
+        title: "Account Created",
+        description: "Welcome to FinSaver! Let's set up your profile.",
+      });
       setLocation("/onboarding");
-    }, 1500);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Registration Failed",
+        description: error.message || "Could not create account",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -65,7 +113,7 @@ export default function AuthPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6 bg-muted/50">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="register">Register</TabsTrigger>
@@ -74,12 +122,14 @@ export default function AuthPage() {
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="username">Username</Label>
                     <Input 
-                      id="email" 
-                      type="email" 
-                      placeholder="aditya@example.com" 
+                      id="username" 
+                      type="text" 
+                      placeholder="Enter your username" 
                       className="bg-background/50 border-border focus:border-primary/50 focus:ring-primary/20"
+                      value={loginUsername}
+                      onChange={(e) => setLoginUsername(e.target.value)}
                       required
                     />
                   </div>
@@ -90,6 +140,8 @@ export default function AuthPage() {
                         id="password" 
                         type={showPassword ? "text" : "password"} 
                         className="bg-background/50 border-border focus:border-primary/50 focus:ring-primary/20 pr-10"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
                         required
                       />
                       <Button
@@ -117,50 +169,47 @@ export default function AuthPage() {
               </TabsContent>
               
               <TabsContent value="register">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName">First Name</Label>
-                      <Input id="firstName" placeholder="Aditya" className="bg-background/50" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName">Last Name</Label>
-                      <Input id="lastName" placeholder="Kumar" className="bg-background/50" />
-                    </div>
-                  </div>
+                <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="reg-email">Email</Label>
-                    <Input id="reg-email" type="email" placeholder="aditya@example.com" className="bg-background/50" />
+                    <Label htmlFor="reg-username">Username</Label>
+                    <Input 
+                      id="reg-username" 
+                      placeholder="Choose a username" 
+                      className="bg-background/50"
+                      value={registerUsername}
+                      onChange={(e) => setRegisterUsername(e.target.value)}
+                      required
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="reg-password">Password</Label>
-                    <Input id="reg-password" type="password" className="bg-background/50" />
+                    <Input 
+                      id="reg-password" 
+                      type="password" 
+                      className="bg-background/50"
+                      value={registerPassword}
+                      onChange={(e) => setRegisterPassword(e.target.value)}
+                      required
+                    />
                   </div>
-                  <Button className="w-full bg-primary hover:bg-primary/90 text-black font-semibold">
-                    Create Account
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-primary hover:bg-primary/90 text-black font-semibold"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating Account...
+                      </>
+                    ) : (
+                      "Create Account"
+                    )}
                   </Button>
-                </div>
+                </form>
               </TabsContent>
             </Tabs>
           </CardContent>
-          <CardFooter className="flex flex-col space-y-2 text-center text-sm text-muted-foreground">
-            <div className="relative w-full py-2">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border"></span>
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 w-full">
-              <Button variant="outline" className="w-full border-border hover:bg-white/5">
-                Google
-              </Button>
-              <Button variant="outline" className="w-full border-border hover:bg-white/5">
-                Phone Number
-              </Button>
-            </div>
-          </CardFooter>
         </Card>
       </div>
     </div>

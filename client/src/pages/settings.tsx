@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Layout from "@/components/layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,37 +11,116 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Bell, Moon, Shield, User, Smartphone, LogOut, Loader2 } from "lucide-react";
+import { profile, settings, auth } from "@/lib/api";
 
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [isSaving, setIsSaving] = useState(false);
+  const queryClient = useQueryClient();
   
   // Form State
-  const [firstName, setFirstName] = useState("Aditya");
-  const [lastName, setLastName] = useState("Kumar");
-  const [email, setEmail] = useState("aditya@example.com");
-  const [phone, setPhone] = useState("+91 98765 43210");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   
   // Toggles
   const [notifications, setNotifications] = useState({
-    expense: true,
-    weekly: true,
+    expense: false,
+    weekly: false,
     rewards: false,
     biometric: false
   });
 
-  const handleSaveProfile = () => {
-    setIsSaving(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsSaving(false);
+  const { data: profileData } = useQuery({
+    queryKey: ["profile"],
+    queryFn: profile.get,
+  });
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["settings"],
+    queryFn: settings.get,
+  });
+
+  useEffect(() => {
+    if (profileData) {
+      setFirstName(profileData.firstName || "");
+      setLastName(profileData.lastName || "");
+      setEmail(profileData.email || "");
+      setPhone(profileData.phone || "");
+    }
+  }, [profileData]);
+
+  useEffect(() => {
+    if (settingsData) {
+      setNotifications({
+        expense: settingsData.expenseAlerts || false,
+        weekly: settingsData.weeklyReport || false,
+        rewards: settingsData.rewardUpdates || false,
+        biometric: settingsData.biometricLogin || false,
+      });
+    }
+  }, [settingsData]);
+
+  const updateProfileMutation = useMutation({
+    mutationFn: profile.updateUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
       toast({
         title: "Profile Updated",
         description: "Your personal information has been saved successfully.",
-        duration: 3000,
       });
-    }, 1000);
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to update profile",
+        description: error.message,
+      });
+    },
+  });
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: settings.update,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      toast({
+        title: "Settings Updated",
+        description: "Your preferences have been saved.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to update settings",
+        description: error.message,
+      });
+    },
+  });
+
+  const handleSaveProfile = () => {
+    updateProfileMutation.mutate({
+      firstName,
+      lastName,
+      email,
+      phone,
+    });
+  };
+
+  const handleToggleSetting = (key: string, value: boolean) => {
+    const newNotifications = { ...notifications, [key]: value };
+    setNotifications(newNotifications);
+    
+    const settingsMap: Record<string, string> = {
+      expense: "expenseAlerts",
+      weekly: "weeklyReport",
+      rewards: "rewardUpdates",
+      biometric: "biometricLogin",
+    };
+    
+    updateSettingsMutation.mutate({
+      [settingsMap[key]]: value,
+    });
   };
 
   const handleLogout = () => {
@@ -126,9 +206,9 @@ export default function SettingsPage() {
             <Button 
               onClick={handleSaveProfile} 
               className="bg-primary text-black hover:bg-primary/90"
-              disabled={isSaving}
+              disabled={updateProfileMutation.isPending}
             >
-              {isSaving ? (
+              {updateProfileMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
@@ -157,7 +237,8 @@ export default function SettingsPage() {
                 </div>
                 <Switch 
                   checked={notifications.expense} 
-                  onCheckedChange={(c) => setNotifications({...notifications, expense: c})} 
+                  onCheckedChange={(c) => handleToggleSetting('expense', c)}
+                  disabled={updateSettingsMutation.isPending}
                 />
               </div>
               <div className="flex items-center justify-between">
@@ -167,7 +248,8 @@ export default function SettingsPage() {
                 </div>
                 <Switch 
                   checked={notifications.weekly} 
-                  onCheckedChange={(c) => setNotifications({...notifications, weekly: c})} 
+                  onCheckedChange={(c) => handleToggleSetting('weekly', c)}
+                  disabled={updateSettingsMutation.isPending}
                 />
               </div>
               <div className="flex items-center justify-between">
@@ -177,7 +259,8 @@ export default function SettingsPage() {
                 </div>
                 <Switch 
                   checked={notifications.rewards} 
-                  onCheckedChange={(c) => setNotifications({...notifications, rewards: c})} 
+                  onCheckedChange={(c) => handleToggleSetting('rewards', c)}
+                  disabled={updateSettingsMutation.isPending}
                 />
               </div>
             </CardContent>
@@ -205,7 +288,8 @@ export default function SettingsPage() {
                 </div>
                 <Switch 
                   checked={notifications.biometric} 
-                  onCheckedChange={(c) => setNotifications({...notifications, biometric: c})} 
+                  onCheckedChange={(c) => handleToggleSetting('biometric', c)}
+                  disabled={updateSettingsMutation.isPending}
                 />
               </div>
               <div className="flex items-center justify-between">

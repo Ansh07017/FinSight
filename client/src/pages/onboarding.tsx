@@ -5,13 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Briefcase, GraduationCap, ArrowRight, IndianRupee, Check } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { profile } from "@/lib/api";
+import { Briefcase, GraduationCap, ArrowRight, IndianRupee, Check, Loader2 } from "lucide-react";
 import logoImg from "@assets/generated_images/minimalist_mint_green_rupee_logo_symbol.png";
 
 export default function OnboardingPage() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [userType, setUserType] = useState<"salaried" | "unemployed">("salaried");
+  const [isLoading, setIsLoading] = useState(false);
   
   // Form State
   const [currentBalance, setCurrentBalance] = useState("");
@@ -19,13 +23,35 @@ export default function OnboardingPage() {
   const [salaryAmount, setSalaryAmount] = useState("");
   const [salaryDate, setSalaryDate] = useState("1");
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (step === 1) {
       setStep(2);
     } else {
-      // In a real app, we would save this data to the backend/context
-      // For now, we just redirect to dashboard
-      setLocation("/");
+      setIsLoading(true);
+      try {
+        await profile.create({
+          userType,
+          currentBalance: currentBalance || "0",
+          totalSavings: currentSavings || "0",
+          salaryAmount: userType === "salaried" ? salaryAmount : null,
+          salaryDate: userType === "salaried" ? parseInt(salaryDate) : null,
+        });
+        
+        toast({
+          title: "Profile Created!",
+          description: "Welcome to FinSaver. Let's start tracking your finances.",
+        });
+        
+        setLocation("/");
+      } catch (error: any) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.message || "Failed to save profile",
+        });
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -171,8 +197,21 @@ export default function OnboardingPage() {
             )}
           </CardContent>
           <CardFooter>
-            <Button onClick={handleContinue} className="w-full bg-primary text-black hover:bg-primary/90 font-semibold text-lg h-12">
-              {step === 1 ? "Next Step" : "Start Tracking"} <ArrowRight className="ml-2 w-5 h-5" />
+            <Button 
+              onClick={handleContinue} 
+              className="w-full bg-primary text-black hover:bg-primary/90 font-semibold text-lg h-12"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 w-5 h-5 animate-spin" />
+                  Setting up...
+                </>
+              ) : (
+                <>
+                  {step === 1 ? "Next Step" : "Start Tracking"} <ArrowRight className="ml-2 w-5 h-5" />
+                </>
+              )}
             </Button>
           </CardFooter>
         </Card>

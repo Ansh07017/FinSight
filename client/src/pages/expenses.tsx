@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Layout from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,23 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { IndianRupee, Plus, Search, Filter, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { IndianRupee, Plus, Search, Filter, ArrowUpRight, ArrowDownRight, Loader2, Trash2 } from "lucide-react";
 import { format } from "date-fns";
-
-// Initial mock data
-const initialTransactions = [
-  { id: 1, title: "Grocery - BigBasket", category: "Food", amount: 2400, date: "2023-12-04", payment: "UPI", type: "expense" },
-  { id: 2, title: "Netflix Subscription", category: "Entertainment", amount: 649, date: "2023-12-03", payment: "Credit Card", type: "expense" },
-  { id: 3, title: "Petrol", category: "Transport", amount: 1200, date: "2023-12-02", payment: "Cash", type: "expense" },
-  { id: 4, title: "Team Lunch", category: "Food", amount: 850, date: "2023-12-01", payment: "UPI", type: "expense" },
-  { id: 5, title: "Electricity Bill", category: "Bills", amount: 1450, date: "2023-11-28", payment: "UPI", type: "expense" },
-  { id: 6, title: "Shopping - Myntra", category: "Shopping", amount: 3200, date: "2023-11-25", payment: "Credit Card", type: "expense" },
-  { id: 7, title: "Salary Credited", category: "Salary", amount: 85000, date: "2023-12-01", payment: "Bank Transfer", type: "income" },
-  { id: 8, title: "Freelance Project", category: "Freelance", amount: 15000, date: "2023-11-20", payment: "UPI", type: "income" },
-];
+import { transactions } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ExpensesPage() {
-  const [transactions, setTransactions] = useState(initialTransactions);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("expense");
   
@@ -33,27 +25,69 @@ export default function ExpensesPage() {
   const [category, setCategory] = useState("");
   const [paymentMode, setPaymentMode] = useState("");
 
+  const { data: transactionList = [], isLoading } = useQuery({
+    queryKey: ["transactions"],
+    queryFn: transactions.list,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: transactions.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      toast({
+        title: "Transaction added",
+        description: "Your transaction has been recorded successfully.",
+      });
+      setIsDialogOpen(false);
+      setAmount("");
+      setDescription("");
+      setCategory("");
+      setPaymentMode("");
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to add transaction",
+        description: error.message,
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: transactions.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      toast({
+        title: "Transaction deleted",
+        description: "The transaction has been removed.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to delete transaction",
+        description: error.message,
+      });
+    },
+  });
+
   const handleAddTransaction = () => {
     if (!amount || !description || !category || !paymentMode) return;
 
-    const newTransaction = {
-      id: transactions.length + 1,
+    createMutation.mutate({
       title: description,
       category,
       amount: parseFloat(amount),
       date: format(new Date(), "yyyy-MM-dd"),
       payment: paymentMode,
       type: activeTab
-    };
+    });
+  };
 
-    setTransactions([newTransaction, ...transactions]);
-    setIsDialogOpen(false);
-    
-    // Reset form
-    setAmount("");
-    setDescription("");
-    setCategory("");
-    setPaymentMode("");
+  const handleDeleteTransaction = (id: string) => {
+    deleteMutation.mutate(id);
   };
 
   return (
@@ -153,8 +187,16 @@ export default function ExpensesPage() {
                   <Button 
                     className="w-full bg-primary text-black hover:bg-primary/90 mt-4"
                     onClick={handleAddTransaction}
+                    disabled={createMutation.isPending}
                   >
-                    Save {activeTab === "expense" ? "Expense" : "Income"}
+                    {createMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      `Save ${activeTab === "expense" ? "Expense" : "Income"}`
+                    )}
                   </Button>
                 </div>
               </Tabs>
@@ -175,45 +217,67 @@ export default function ExpensesPage() {
               </Button>
             </div>
 
-            <div className="space-y-2">
-              <div className="grid grid-cols-12 text-sm font-medium text-muted-foreground px-4 py-2">
-                <div className="col-span-5 md:col-span-4">Description</div>
-                <div className="col-span-3 md:col-span-3">Category</div>
-                <div className="hidden md:block col-span-2">Date</div>
-                <div className="hidden md:block col-span-1">Mode</div>
-                <div className="col-span-4 md:col-span-2 text-right">Amount</div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-              
-              {transactions.map((tx) => (
-                <div key={tx.id} className="grid grid-cols-12 items-center p-4 rounded-lg bg-secondary/20 hover:bg-secondary/40 transition-colors border border-transparent hover:border-primary/20">
-                  <div className="col-span-5 md:col-span-4 font-medium text-white truncate pr-2 flex items-center gap-2">
-                    <div className={`p-1.5 rounded-full ${tx.type === 'income' ? 'bg-success/20 text-success' : 'bg-red-500/20 text-red-500'}`}>
-                      {tx.type === 'income' ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
-                    </div>
-                    {tx.title}
-                  </div>
-                  <div className="col-span-3 md:col-span-3">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      tx.type === 'income' ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'
-                    }`}>
-                      {tx.category}
-                    </span>
-                  </div>
-                  <div className="hidden md:block col-span-2 text-sm text-muted-foreground">
-                    {tx.date}
-                  </div>
-                  <div className="hidden md:block col-span-1 text-sm text-muted-foreground">
-                    {tx.payment}
-                  </div>
-                  <div className={`col-span-4 md:col-span-2 text-right font-semibold flex justify-end items-center ${
-                    tx.type === 'income' ? 'text-success' : 'text-white'
-                  }`}>
-                    <IndianRupee className="w-3 h-3 mr-0.5" />
-                    {tx.amount.toLocaleString()}
-                  </div>
+            ) : transactionList.length === 0 ? (
+              <div className="text-center text-muted-foreground py-12">
+                No transactions yet. Add your first transaction to get started!
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-12 text-sm font-medium text-muted-foreground px-4 py-2">
+                  <div className="col-span-5 md:col-span-4">Description</div>
+                  <div className="col-span-3 md:col-span-2">Category</div>
+                  <div className="hidden md:block col-span-2">Date</div>
+                  <div className="hidden md:block col-span-1">Mode</div>
+                  <div className="col-span-4 md:col-span-2 text-right">Amount</div>
+                  <div className="hidden md:block col-span-1"></div>
                 </div>
-              ))}
-            </div>
+                
+                {transactionList.map((tx: any) => (
+                  <div key={tx.id} className="grid grid-cols-12 items-center p-4 rounded-lg bg-secondary/20 hover:bg-secondary/40 transition-colors border border-transparent hover:border-primary/20">
+                    <div className="col-span-5 md:col-span-4 font-medium text-white truncate pr-2 flex items-center gap-2">
+                      <div className={`p-1.5 rounded-full ${tx.type === 'income' ? 'bg-success/20 text-success' : 'bg-red-500/20 text-red-500'}`}>
+                        {tx.type === 'income' ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
+                      </div>
+                      {tx.title}
+                    </div>
+                    <div className="col-span-3 md:col-span-2">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        tx.type === 'income' ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'
+                      }`}>
+                        {tx.category}
+                      </span>
+                    </div>
+                    <div className="hidden md:block col-span-2 text-sm text-muted-foreground">
+                      {tx.date}
+                    </div>
+                    <div className="hidden md:block col-span-1 text-sm text-muted-foreground">
+                      {tx.payment}
+                    </div>
+                    <div className={`col-span-4 md:col-span-2 text-right font-semibold flex justify-end items-center ${
+                      tx.type === 'income' ? 'text-success' : 'text-white'
+                    }`}>
+                      <IndianRupee className="w-3 h-3 mr-0.5" />
+                      {tx.amount.toLocaleString()}
+                    </div>
+                    <div className="hidden md:flex col-span-1 justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        onClick={() => handleDeleteTransaction(tx.id)}
+                        disabled={deleteMutation.isPending}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
