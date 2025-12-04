@@ -23,7 +23,7 @@ const navItems = [
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full bg-card border-r border-border">
@@ -55,17 +55,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       <div className="p-4 border-t border-border/50">
-        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
-          <Avatar className="w-10 h-10 border border-primary/20">
-            <AvatarImage src="https://github.com/shadcn.png" />
-            <AvatarFallback>AD</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-medium text-white truncate">Aditya Kumar</p>
-            <p className="text-xs text-muted-foreground truncate">Gold Tier Member</p>
+        <Link href="/settings">
+          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group">
+            <Avatar className="w-10 h-10 border border-primary/20 group-hover:border-primary/50 transition-colors">
+              <AvatarImage src="https://github.com/shadcn.png" />
+              <AvatarFallback>AD</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 overflow-hidden">
+              <p className="text-sm font-medium text-white truncate group-hover:text-primary transition-colors">Aditya Kumar</p>
+              <p className="text-xs text-muted-foreground truncate">Gold Tier Member</p>
+            </div>
+            <Settings className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
-          <LogOut className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-        </div>
+        </Link>
       </div>
     </div>
   );

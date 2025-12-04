@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useLocation } from "wouter";
 import Layout from "@/components/layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,9 +7,59 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Bell, Moon, Shield, User, Smartphone, LogOut } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { Bell, Moon, Shield, User, Smartphone, LogOut, Loader2 } from "lucide-react";
 
 export default function SettingsPage() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Form State
+  const [firstName, setFirstName] = useState("Aditya");
+  const [lastName, setLastName] = useState("Kumar");
+  const [email, setEmail] = useState("aditya@example.com");
+  const [phone, setPhone] = useState("+91 98765 43210");
+  
+  // Toggles
+  const [notifications, setNotifications] = useState({
+    expense: true,
+    weekly: true,
+    rewards: false,
+    biometric: false
+  });
+
+  const handleSaveProfile = () => {
+    setIsSaving(true);
+    // Simulate API call
+    setTimeout(() => {
+      setIsSaving(false);
+      toast({
+        title: "Profile Updated",
+        description: "Your personal information has been saved successfully.",
+        duration: 3000,
+      });
+    }, 1000);
+  };
+
+  const handleLogout = () => {
+    toast({
+      title: "Logged Out",
+      description: "You have been securely logged out.",
+    });
+    setLocation("/auth");
+  };
+
+  const handleDeleteAccount = () => {
+    toast({
+      variant: "destructive",
+      title: "Account Deleted",
+      description: "Your account has been permanently removed.",
+    });
+    setLocation("/auth");
+  };
+
   return (
     <Layout>
       <div className="space-y-8 max-w-4xl mx-auto">
@@ -40,22 +92,51 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>First Name</Label>
-                <Input defaultValue="Aditya" className="bg-secondary/50 border-border" />
+                <Input 
+                  value={firstName} 
+                  onChange={(e) => setFirstName(e.target.value)} 
+                  className="bg-secondary/50 border-border" 
+                />
               </div>
               <div className="space-y-2">
                 <Label>Last Name</Label>
-                <Input defaultValue="Kumar" className="bg-secondary/50 border-border" />
+                <Input 
+                  value={lastName} 
+                  onChange={(e) => setLastName(e.target.value)} 
+                  className="bg-secondary/50 border-border" 
+                />
               </div>
               <div className="space-y-2">
                 <Label>Email Address</Label>
-                <Input defaultValue="aditya@example.com" className="bg-secondary/50 border-border" />
+                <Input 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  className="bg-secondary/50 border-border" 
+                />
               </div>
               <div className="space-y-2">
                 <Label>Phone Number</Label>
-                <Input defaultValue="+91 98765 43210" className="bg-secondary/50 border-border" />
+                <Input 
+                  value={phone} 
+                  onChange={(e) => setPhone(e.target.value)} 
+                  className="bg-secondary/50 border-border" 
+                />
               </div>
             </div>
-            <Button className="bg-primary text-black hover:bg-primary/90">Save Changes</Button>
+            <Button 
+              onClick={handleSaveProfile} 
+              className="bg-primary text-black hover:bg-primary/90"
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
           </CardContent>
         </Card>
 
@@ -74,21 +155,30 @@ export default function SettingsPage() {
                   <Label className="text-base">Expense Alerts</Label>
                   <p className="text-xs text-muted-foreground">Get notified when you exceed budget</p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={notifications.expense} 
+                  onCheckedChange={(c) => setNotifications({...notifications, expense: c})} 
+                />
               </div>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="text-base">Weekly Report</Label>
                   <p className="text-xs text-muted-foreground">Receive weekly spending summary</p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={notifications.weekly} 
+                  onCheckedChange={(c) => setNotifications({...notifications, weekly: c})} 
+                />
               </div>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="text-base">Reward Updates</Label>
                   <p className="text-xs text-muted-foreground">Notifications about earned points</p>
                 </div>
-                <Switch />
+                <Switch 
+                  checked={notifications.rewards} 
+                  onCheckedChange={(c) => setNotifications({...notifications, rewards: c})} 
+                />
               </div>
             </CardContent>
           </Card>
@@ -113,14 +203,17 @@ export default function SettingsPage() {
                   <Label className="text-base">Biometric Login</Label>
                   <p className="text-xs text-muted-foreground">Use fingerprint/FaceID to login</p>
                 </div>
-                <Switch />
+                <Switch 
+                  checked={notifications.biometric} 
+                  onCheckedChange={(c) => setNotifications({...notifications, biometric: c})} 
+                />
               </div>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="text-base">Currency</Label>
                   <p className="text-xs text-muted-foreground">Display currency symbol</p>
                 </div>
-                <Button variant="ghost" size="sm" className="text-muted-foreground">INR (₹)</Button>
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-white">INR (₹)</Button>
               </div>
             </CardContent>
           </Card>
@@ -140,7 +233,30 @@ export default function SettingsPage() {
                 <p className="font-medium text-white">Change Password</p>
                 <p className="text-sm text-muted-foreground">Update your password regularly</p>
               </div>
-              <Button variant="outline" className="border-border hover:bg-white/5">Update</Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="border-border hover:bg-white/5">Update</Button>
+                </DialogTrigger>
+                <DialogContent className="bg-card border-border text-white">
+                  <DialogHeader>
+                    <DialogTitle>Change Password</DialogTitle>
+                    <DialogDescription>Enter your current password to set a new one.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label>Current Password</Label>
+                      <Input type="password" className="bg-secondary border-border" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>New Password</Label>
+                      <Input type="password" className="bg-secondary border-border" />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button className="bg-primary text-black hover:bg-primary/90">Update Password</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
             
             <div className="flex items-center justify-between p-4 border border-red-900/30 rounded-lg bg-red-900/10">
@@ -148,13 +264,32 @@ export default function SettingsPage() {
                 <p className="font-medium text-red-400">Delete Account</p>
                 <p className="text-sm text-red-400/70">Permanently remove your data</p>
               </div>
-              <Button variant="destructive" className="bg-red-600 hover:bg-red-700">Delete</Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" className="bg-red-600 hover:bg-red-700">Delete</Button>
+                </DialogTrigger>
+                <DialogContent className="bg-card border-border text-white">
+                  <DialogHeader>
+                    <DialogTitle>Are you absolutely sure?</DialogTitle>
+                    <DialogDescription>
+                      This action cannot be undone. This will permanently delete your account and remove your data from our servers.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="destructive" onClick={handleDeleteAccount}>Yes, delete my account</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </CardContent>
         </Card>
         
         <div className="flex justify-center pt-4">
-          <Button variant="ghost" className="text-muted-foreground hover:text-destructive gap-2">
+          <Button 
+            variant="ghost" 
+            className="text-muted-foreground hover:text-destructive gap-2 hover:bg-destructive/10"
+            onClick={handleLogout}
+          >
             <LogOut className="w-4 h-4" />
             Log Out of All Devices
           </Button>
