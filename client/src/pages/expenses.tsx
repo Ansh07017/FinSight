@@ -124,7 +124,9 @@ export default function ExpensesPage() {
                         ) : (
                           <>
                             <SelectItem value="Salary">Salary</SelectItem>
+                            <SelectItem value="Papa">Papa (Family)</SelectItem>
                             <SelectItem value="Freelance">Freelance</SelectItem>
+                            <SelectItem value="Pocket Money">Pocket Money</SelectItem>
                             <SelectItem value="Investment">Investment</SelectItem>
                             <SelectItem value="Gift">Gift</SelectItem>
                             <SelectItem value="Other">Other</SelectItem>

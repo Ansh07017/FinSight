@@ -10,11 +10,13 @@ import ExpensesPage from "@/pages/expenses";
 import RewardsPage from "@/pages/rewards";
 import SettingsPage from "@/pages/settings";
 import ReportsPage from "@/pages/reports";
+import OnboardingPage from "@/pages/onboarding";
 
 function Router() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
+      <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/" component={Dashboard} />
       <Route path="/expenses" component={ExpensesPage} />
       <Route path="/rewards" component={RewardsPage} />

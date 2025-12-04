@@ -20,7 +20,9 @@ export default function AuthPage() {
     // Mock login delay
     setTimeout(() => {
       setIsLoading(false);
-      setLocation("/");
+      // Redirect to onboarding for new user simulation, or dashboard for returning
+      // For this prototype, let's show onboarding flow
+      setLocation("/onboarding");
     }, 1500);
   };
 
