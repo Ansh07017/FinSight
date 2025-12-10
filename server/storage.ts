@@ -1,8 +1,11 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import { drizzle } from "drizzle-orm/node-postgres";
 import pkg from "pg";
 const { Pool } = pkg;
 import { eq, and, desc, sql } from "drizzle-orm";
-import * as schema from "@shared/schema";
+import * as schema from "../shared/schema.ts";
 import type {
   User,
   InsertUser,
@@ -12,13 +15,15 @@ import type {
   InsertTransaction,
   UserSettings,
   InsertUserSettings,
-} from "@shared/schema";
+} from "../shared/schema.ts";
+ 
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.PG_CONNECTION_STRING,
 });
 
 const db = drizzle(pool, { schema });
+
 
 export interface IStorage {
   // User methods

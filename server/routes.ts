@@ -7,8 +7,8 @@ import ConnectPg from "connect-pg-simple";
 import pkg from "pg";
 const { Pool } = pkg;
 import bcrypt from "bcryptjs";
-import { storage } from "./storage";
-import { insertUserSchema, insertUserProfileSchema, insertTransactionSchema, insertUserSettingsSchema } from "@shared/schema";
+import { storage } from "./storage.ts";
+import { insertUserSchema, insertUserProfileSchema, insertTransactionSchema, insertUserSettingsSchema } from "../shared/schema.ts";
 
 const pgStore = ConnectPg(session);
 
@@ -60,7 +60,7 @@ export async function registerRoutes(
 ): Promise<Server> {
   // Session setup
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.PG_CONNECTION_STRING,
   });
 
   app.use(
@@ -80,6 +80,7 @@ export async function registerRoutes(
   
   // Register
   app.post("/api/auth/register", async (req, res, next) => {
+    
     try {
       const { username, password } = insertUserSchema.parse(req.body);
 
@@ -90,7 +91,7 @@ export async function registerRoutes(
 
       const hashedPassword = await bcrypt.hash(password, 10);
       const user = await storage.createUser({ username, password: hashedPassword });
-
+      
       // Create default settings
       await storage.createUserSettings({ userId: user.id });
 
@@ -99,7 +100,8 @@ export async function registerRoutes(
         res.json({ user: { id: user.id, username: user.username } });
       });
     } catch (error: any) {
-      res.status(400).json({ message: error.message });
+ 
+console.error("REGISTRATION TIMEOUT/FAILURE. FULL ERROR OBJECT:", error); 
     }
   });
 

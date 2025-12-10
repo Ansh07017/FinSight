@@ -1,6 +1,9 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { serveStatic } from "./static";
+import * as dotenv from 'dotenv';
+dotenv.config();
+import express from "express";
+import type { Request, Response, NextFunction } from "express";
+import { registerRoutes } from "./routes.ts";
+import { serveStatic } from "./static.ts";
 import { createServer } from "http";
 
 const app = express();
@@ -76,20 +79,17 @@ app.use((req, res, next) => {
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
-    const { setupVite } = await import("./vite");
+    const { setupVite } = await import("./vite.ts");
     await setupVite(httpServer, app);
   }
 
   const port = parseInt(process.env.PORT || "3000", 10);
   const host = process.env.HOST || "127.0.0.1";
-  httpServer.listen(
-    {
-      port,
-      host,
-      reusePort: true,
-    },
+    httpServer.listen(
+    port,
+    host,
     () => {
-      log(`serving at http://${host}:${port}`);
+            log(`serving at http://${host}:${port}`);
     },
-  );
+    );
 })();
