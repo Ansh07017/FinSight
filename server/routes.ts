@@ -78,7 +78,69 @@ export async function registerRoutes(
 
   // ========== Auth Routes ==========
   
-  // Register
+  // Register// Add these routes inside the registerRoutes function
+
+  // Change Password
+  app.put("/api/auth/password", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Both current and new passwords are required" });
+      }
+
+      // 1. Get user with password hash (using the storage layer)
+      const userData = await storage.getUser(user.id);
+      if (!userData) return res.status(404).json({ message: "User not found" });
+
+      // 2. Verify current password
+      const isValid = await bcrypt.compare(currentPassword, userData.password);
+      if (!isValid) {
+        return res.status(400).json({ message: "Invalid current password" });
+      }
+
+      // 3. Hash new password and update
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(user.id, { password: hashedPassword });
+      return res.status(204).send()
+    } catch (error: any) {
+      return res.status(500).json({ message: error.message || "Failed to update password." });
+    }
+  });
+
+  // Delete Account
+  app.delete("/api/auth/account", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { password } = req.body;
+
+      if (!password) {
+        return res.status(400).json({ message: "Password is required to confirm deletion" });
+      }
+
+      const userData = await storage.getUser(user.id);
+    if (!userData) {
+    return res.status(404).json({ message: "User not found" });
+    }
+      const isValid = await bcrypt.compare(password, userData.password);
+      if (!isValid) {
+        return res.status(400).json({ message: "Incorrect password. Deletion cancelled." });
+      }
+
+      
+      await storage.deleteUser(user.id);
+
+      req.logout((err) => {
+        if (err) return res.status(500).json({ message: "Account deleted, but logout failed" });
+        res.json({ message: "Account permanently deleted" });
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+
   app.post("/api/auth/register", async (req, res, next) => {
     
     try {
@@ -253,81 +315,133 @@ console.error("REGISTRATION TIMEOUT/FAILURE. FULL ERROR OBJECT:", error);
   // ========== Dashboard Routes ==========
   
   // Get dashboard data
-  app.get("/api/dashboard", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as any;
-      const profile = await storage.getUserProfile(user.id);
-      const transactions = await storage.getTransactions(user.id);
-      
-      // Calculate monthly stats
-      const now = new Date();
-      const monthlyStats = await storage.getMonthlyStats(
-        user.id,
-        now.getFullYear(),
-        now.getMonth() + 1
-      );
+// server/routes.ts (Inside app.get("/api/dashboard", ...))
 
-      res.json({
-        profile,
-        monthlyStats,
-        recentTransactions: transactions.slice(0, 10),
-      });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
+// Get dashboard data
+app.get("/api/dashboard", requireAuth, async (req, res) => {
+    try {
+        const user = req.user as any;
+        const { range } = req.query; // Get the range filter from the client (e.g., 'week', '15days', 'month')
+
+        let daysToSubtract = 30; // Default to 'month' (30 days)
+
+        switch (range) {
+            case 'week':
+                daysToSubtract = 7;
+                break;
+            case '10days':
+                daysToSubtract = 10;
+                break;
+            case '15days':
+                daysToSubtract = 15;
+                break;
+            case 'month':
+            default:
+                daysToSubtract = 30;
+                break;
+        }
+
+        const today = new Date();
+        const startDate = new Date(today);
+        startDate.setDate(today.getDate() - daysToSubtract); // Calculate start date
+
+        // --- Fetch Data ---
+        const profile = await storage.getUserProfile(user.id);
+        
+        // Using the new, comprehensive storage method
+        const dashboardData = await storage.getDashboardData(
+            user.id,
+            startDate,
+            today
+        );
+
+        res.json({
+            profile,
+            user: {
+                firstName: user.firstName,
+                lastName: user.lastName,
+                username: user.username,
+            },
+            
+            monthlyStats: dashboardData.stats,
+            recentTransactions: dashboardData.recentTransactions,
+            weeklySpendTrend: dashboardData.weeklySpendTrend,
+            expensesByCategory: dashboardData.expensesByCategory,
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+  // ========== Reports Routes (FIXED CALLS) ==========
 
   // ========== Reports Routes ==========
   
   // Get monthly report
-  app.get("/api/reports/monthly", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as any;
-      const { year, month } = req.query;
-      
-      if (!year || !month) {
-        return res.status(400).json({ message: "Year and month are required" });
-      }
+app.get("/api/reports/monthly", requireAuth, async (req, res) => {
+    try {
+        const user = req.user as any;
+        const { year, month } = req.query;
+        
+        if (!year || !month) {
+            return res.status(400).json({ message: "Year and month are required" });
+        }
 
-      const stats = await storage.getMonthlyStats(
-        user.id,
-        parseInt(year as string),
-        parseInt(month as string)
-      );
+        const yearInt = parseInt(year as string);
+        const monthInt = parseInt(month as string);
 
-      res.json(stats);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
+        const startDate = new Date(yearInt, monthInt - 1, 1);
+        const endDate = new Date(yearInt, monthInt, 0, 23, 59, 59);
+        
+        // Use the comprehensive dashboard data getter
+        const reportData = await storage.getDashboardData(
+            user.id,
+            startDate,
+            endDate
+        );
+
+        // Return the core stats expected by the old report endpoint
+        res.json(reportData.stats); 
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+});
 
   // Get last 6 months report
-  app.get("/api/reports/history", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as any;
-      const now = new Date();
-      const reports = [];
+app.get("/api/reports/history", requireAuth, async (req, res) => {
+    try {
+        const user = req.user as any;
+        const now = new Date();
+        const reports = [];
 
-      for (let i = 5; i >= 0; i--) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const stats = await storage.getMonthlyStats(
-          user.id,
-          date.getFullYear(),
-          date.getMonth() + 1
-        );
+        for (let i = 5; i >= 0; i--) {
+            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            
+            const yearInt = date.getFullYear();
+            const monthInt = date.getMonth() + 1;
+            
+            const startDate = new Date(yearInt, monthInt - 1, 1);
+            const endDate = new Date(yearInt, monthInt, 0, 23, 59, 59);
 
-        reports.push({
-          month: date.toLocaleString("en-US", { month: "long" }),
-          year: date.getFullYear(),
-          ...stats,
-        });
-      }
+            // Use the comprehensive dashboard data getter
+            const reportData = await storage.getDashboardData(
+                user.id,
+                startDate,
+                endDate
+            );
 
-      res.json(reports);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
+            reports.push({
+                month: date.toLocaleString("en-US", { month: "long" }),
+                year: date.getFullYear(),
+                ...reportData.stats, // Only send the core income/expense/savings stats
+            });
+        }
+
+        res.json(reports);
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+});
 
   // ========== Settings Routes ==========
   
@@ -352,6 +466,8 @@ console.error("REGISTRATION TIMEOUT/FAILURE. FULL ERROR OBJECT:", error);
       res.status(400).json({ message: error.message });
     }
   });
+  
+  
 
   return httpServer;
 }

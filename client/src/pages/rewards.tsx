@@ -1,4 +1,3 @@
-import Layout from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +5,6 @@ import { Trophy, Star, Target, TrendingUp, Lock, Gift } from "lucide-react";
 
 export default function RewardsPage() {
   return (
-    <Layout>
       <div className="space-y-8">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <h1 className="text-4xl font-bold text-white mb-4">Your Savings Journey</h1>
@@ -17,7 +15,7 @@ export default function RewardsPage() {
 
         {/* Current Status */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="md:col-span-2 bg-gradient-to-br from-card to-secondary/50 border-border/50 relative overflow-hidden">
+          <Card className="md:col-span-2 bg-linear-to-br from-card to-secondary/50 border-border/50 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-8 opacity-10">
               <Trophy className="w-48 h-48" />
             </div>
@@ -132,6 +130,5 @@ export default function RewardsPage() {
           </Card>
         </div>
       </div>
-    </Layout>
   );
 }

@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
-import Layout from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { IndianRupee, TrendingUp, TrendingDown, PiggyBank, Loader2 } from "lucide-react";
@@ -30,15 +29,6 @@ export default function ReportsPage() {
     }
   }, [error, toast]);
 
-  if (isLoading) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center h-[calc(100vh-200px)]">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      </Layout>
-    );
-  }
 
   const {
     monthlyData = [],
@@ -49,7 +39,6 @@ export default function ReportsPage() {
   } = data || {};
 
   return (
-    <Layout>
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-bold text-white">Financial Report</h1>
@@ -181,6 +170,5 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
       </div>
-    </Layout>
   );
 }

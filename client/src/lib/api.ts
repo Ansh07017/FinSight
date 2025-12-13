@@ -1,7 +1,10 @@
 // API helper functions
 
 const API_URL = "";
-
+export interface ChangePasswordData { // Exported for use in components
+    currentPassword: string;
+    newPassword: string;
+}
 export async function apiRequest(endpoint: string, options?: RequestInit) {
   const response = await fetch(`${API_URL}${endpoint}`, {
     credentials: "include",
@@ -16,10 +19,11 @@ export async function apiRequest(endpoint: string, options?: RequestInit) {
     const error = await response.json().catch(() => ({ message: "Request failed" }));
     throw new Error(error.message || `Request failed with status ${response.status}`);
   }
-
+  if (response.status === 204) {
+      return null; 
+  }
   return response.json();
 }
-
 // Auth APIs
 export const auth = {
   register: (username: string, password: string) =>
@@ -40,6 +44,20 @@ export const auth = {
     }),
 
   me: () => apiRequest("/api/auth/me"),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiRequest("/api/auth/password", {
+      method: "PUT",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+
+  // 2. DELETE ACCOUNT
+  deleteAccount: (password: string) =>
+    apiRequest("/api/auth/account", {
+      method: "DELETE",
+      // It is standard practice to require the current password to confirm permanent deletion
+      body: JSON.stringify({ password }),
+    }),
 };
 
 // Profile APIs
