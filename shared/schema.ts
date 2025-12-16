@@ -104,7 +104,25 @@ export const userProfiles = pgTable("user_profiles", {
   salaryDate: integer("salary_date"), // Day of month (1-31)
   rewardPoints: integer("reward_points").default(0),
   tier: text("tier").default("Bronze"), // Bronze, Silver, Gold, Platinum
+  goalType: text("goal_type").$type<'monthly_amount' | 'percentage_income'>().default('monthly_amount'),
+  targetValue: varchar("target_value"),
 });
+
+export const behavioralSavings = pgTable("behavioral_savings", {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    behaviorType: text("behavior_type").notNull(), // e.g., 'walked_instead_of_cab'
+    estimatedAmount: decimal("estimated_amount", { precision: 12, scale: 2 }).notNull(),
+    xpAwarded: integer("xp_awarded").default(0),
+    loggedAt: timestamp("logged_at").defaultNow(),
+});
+
+export const insertBehavioralSavingsSchema = createInsertSchema(behavioralSavings).omit({
+    id: true,
+    loggedAt: true,
+});
+
+export type InsertBehavioralSavings = z.infer<typeof insertBehavioralSavingsSchema>;
 
 export const transactions = pgTable("transactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -137,9 +155,7 @@ export const insertUserProfileSchema = createInsertSchema(userProfiles).omit({
   id: true,
 });
 
-// =========================================================================================
-// FIX: Override default types for amount and date to enforce number and Date object
-// =========================================================================================
+
 export const insertTransactionSchema = createInsertSchema(transactions, {
     amount: z.string()
         .min(1, "Amount is required.")

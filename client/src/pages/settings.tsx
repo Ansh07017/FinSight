@@ -8,29 +8,34 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, Shield, User, Smartphone, LogOut, Loader2 } from "lucide-react";
+import { Bell, Shield, User, Smartphone, LogOut, Loader2, Target } from "lucide-react";
 import { profile, settings, auth } from "@/lib/api";
 
-// --- TYPE DEFINITIONS FOR MUTATIONS ---
+// --- TYPE DEFINITIONS FOR MUTATIONS (FIXED/UPDATED) ---
 interface ChangePasswordData {
     currentPassword: string;
     newPassword: string;
+}
+interface GoalUpdateData { 
+    goalType: 'monthly_amount' | 'percentage_income';
+    targetValue: string;
 }
 
 // --- HELPER FUNCTIONS ---
 
 const getAvatarUrl = (profileData: any): string => {
-   
-    const firstName = profileData?.user?.firstName;
-    const username = profileData?.user?.username; 
-    
-    const seed = firstName || username || 'Default';
-    
-    if (seed === 'Default') {
-        return 'https://github.com/shadcn.png'; 
-    }
-    return `https://api.dicebear.com/8.x/initials/svg?seed=${seed}&radius=50&chars=1`;
+   
+    const firstName = profileData?.user?.firstName;
+    const username = profileData?.user?.username; 
+    
+    const seed = firstName || username || 'Default';
+    
+    if (seed === 'Default') {
+        return 'https://github.com/shadcn.png'; 
+    }
+    return `https://api.dicebear.com/8.x/initials/svg?seed=${seed}&radius=50&chars=1`;
 };
 
 const changePasswordWrapper: MutationFunction<void, ChangePasswordData> = async (variables) => {
@@ -53,6 +58,10 @@ export default function SettingsPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
 
+  // --- Financial Goal State ---
+  const [goalType, setGoalType] = useState<GoalUpdateData['goalType']>("monthly_amount"); 
+  const [targetValue, setTargetValue] = useState(""); 
+    
   // --- Change Password State ---
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -91,6 +100,11 @@ export default function SettingsPage() {
         setEmail(user.email || "");
         setPhone(user.phone || "");
     }
+    // Load Goals into state
+    if (profileData && profileData.profile) {
+        setGoalType(profileData.profile.goalType || "monthly_amount");
+        setTargetValue(profileData.profile.targetValue || "");
+    }
   }, [profileData]);
 
   useEffect(() => {
@@ -107,7 +121,7 @@ export default function SettingsPage() {
   // --- Mutations ---
   
   const updateProfileMutation = useMutation({
-    mutationFn: profile.updateUser,
+    mutationFn: profile.updateUser, // Updates core user details (/api/profile/user)
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
       toast({
@@ -147,7 +161,7 @@ export default function SettingsPage() {
     onSuccess: () => {
         setCurrentPassword("");
         setNewPassword("");
-        setIsPasswordDialogOpen(false); // Close dialog on success
+        setIsPasswordDialogOpen(false); 
         toast({
             title: "Password Updated",
             description: "Your password has been changed successfully.",
@@ -165,7 +179,7 @@ export default function SettingsPage() {
   const deleteAccountMutation = useMutation<void, Error, string>({
     mutationFn: deleteAccountWrapper,
     onSuccess: () => {
-        setIsDeleteDialogOpen(false); // Close dialog on success
+        setIsDeleteDialogOpen(false); 
         toast({
             variant: "destructive",
             title: "Account Deleted",
@@ -182,9 +196,32 @@ export default function SettingsPage() {
     },
   });
 
+// NEW: Goal Update Mutation (Updates user profiles data, including goals)
+// FIX 1: Add GoalUpdateData as TVariables generic type
+const updateGoalMutation = useMutation<any, Error, GoalUpdateData>({
+    // FIX 2: Assuming profile.update is the correct function mapped to POST /api/profile
+    mutationFn: (data) => profile.create(data), // Using create as a general profile update until 'update' is defined
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["profile"] });
+        toast({
+            title: "Goal Updated",
+            description: "Your monthly savings goal has been set successfully.",
+        });
+    },
+    onError: (error: Error) => {
+        toast({
+            variant: "destructive",
+            title: "Goal Update Failed",
+            description: error.message || "Could not save savings goal.",
+        });
+    },
+});
+
+
   // --- Handlers ---
   
   const handleSaveProfile = () => {
+    // Handler for core user details (firstName, email, etc.)
     updateProfileMutation.mutate({
       firstName,
       lastName,
@@ -192,6 +229,26 @@ export default function SettingsPage() {
       phone,
     });
   };
+    
+// NEW: Handler for saving the goal (targets userProfiles table)
+const handleSaveGoal = () => {
+    // Basic validation
+    if (!targetValue || isNaN(Number(targetValue)) || Number(targetValue) <= 0) {
+        toast({
+            variant: "destructive",
+            title: "Invalid Target",
+            description: "Please enter a valid positive savings amount or percentage.",
+        });
+        return;
+    }
+
+    // Call the dedicated mutation
+    // FIX 3: Mutate call is now correctly typed to accept GoalUpdateData
+    updateGoalMutation.mutate({
+        goalType,
+        targetValue, 
+    });
+};
 
   const handleToggleSetting = (key: string, value: boolean) => {
     const newNotifications = { ...notifications, [key]: value };
@@ -249,7 +306,7 @@ export default function SettingsPage() {
           <p className="text-muted-foreground">Manage your account preferences and app settings</p>
         </div>
 
-        {/* Profile Section */}
+        {/* Profile Information */}
         <Card className="bg-card border-border/50">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
@@ -262,7 +319,6 @@ export default function SettingsPage() {
             <div className="flex items-center gap-6">
               <Avatar className="w-20 h-20 border-2 border-primary/20">
         <AvatarImage 
-            // Dynamic Avatar Logic
             src={getAvatarUrl(profileData)} 
         /> 
         <AvatarFallback>
@@ -271,10 +327,9 @@ export default function SettingsPage() {
         </AvatarFallback>
     </Avatar>
     <div className="space-y-2">
-        {/* FIXED: Accessing the name via profileData.user.firstName/lastName */}
         <p className="font-medium text-white">
-            {profileData?.user?.firstName} {profileData?.user?.lastName}
-        </p>
+            {profileData?.user?.firstName} {profileData?.user?.lastName}
+        </p>
     </div>
             </div>
             
@@ -329,6 +384,72 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* NEW: Financial Goal Setting Card */}
+        <Card className="bg-card border-border/50">
+            <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                    <Target className="w-5 h-5 text-accent" />
+                    Monthly Savings Goal
+                </CardTitle>
+                <CardDescription>Define your monthly savings commitment for rewards and tier progression.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                {/* Segmented Control for Goal Type Selection */}
+                <div className="space-y-2">
+                    <Label>Goal Type</Label>
+                    <Tabs 
+                        value={goalType} 
+                        onValueChange={(value) => setGoalType(value as GoalUpdateData['goalType'])} 
+                        className="w-full"
+                    >
+                        {/* Consistent look similar to transaction type selector */}
+                        <TabsList className="grid w-full grid-cols-2 bg-secondary/50 border-border">
+                            <TabsTrigger value="monthly_amount">Fixed Amount (₹)</TabsTrigger>
+                            <TabsTrigger value="percentage_income">Percentage (%)</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                </div>
+
+                {/* Conditional Input for Target Value */}
+                <div className="space-y-2">
+                    <Label htmlFor="target-value">
+                        {/* Dynamically adjust the label */}
+                        {goalType === "monthly_amount" ? "Target Savings Amount (₹)" : "Target Percentage (%)"}
+                    </Label>
+                    <Input 
+                        id="target-value"
+                        type="number"
+                        value={targetValue}
+                        onChange={(e) => setTargetValue(e.target.value)} 
+                        className="bg-secondary/50 border-border" 
+                        placeholder={goalType === "monthly_amount" ? "e.g., 5000" : "e.g., 15"}
+                    />
+                </div>
+                
+                {/* Save Goal Button */}
+                <p className="text-xs text-muted-foreground pt-2">
+                    This commitment determines your Monthly Savings Status and Tier Progression.
+                </p>
+                
+                <Button 
+                    onClick={handleSaveGoal} // Dedicated handler
+                    className="bg-accent text-black hover:bg-accent/90 font-semibold"
+                    disabled={updateGoalMutation.isPending || !targetValue} // Disable if value is missing
+                >
+                    {updateGoalMutation.isPending ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving Goal...
+                        </>
+                    ) : (
+                        "Set Goal"
+                    )}
+                </Button>
+            </CardContent>
+        </Card>
+
+
+        {/* Preferences */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card className="bg-card border-border/50">
             <CardHeader>

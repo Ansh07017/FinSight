@@ -9,12 +9,14 @@ import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import AuthPage from "@/pages/auth";
 import ExpensesPage from "@/pages/expenses";
+import BehavioralSavings from "@/pages/behavioralSavings";
 import RewardsPage from "@/pages/rewards";
 import SettingsPage from "@/pages/settings";
 import ReportsPage from "@/pages/reports";
 import OnboardingPage from "@/pages/onboarding";
 import { AuthProvider } from "@/components/AuthContext"; 
 import Layout from "@/components/layout"; 
+
 
 function AppRouter() {
   return (
@@ -38,6 +40,7 @@ function AppRouter() {
             <Route path="/expenses" component={ExpensesPage} />
             <Route path="/rewards" component={RewardsPage} />
             <Route path="/reports" component={ReportsPage} />
+            <Route path="/behavioralSavings" component={BehavioralSavings} />
             <Route path="/settings" component={SettingsPage} />
             
             {/* Fallback route inside the Layout */}

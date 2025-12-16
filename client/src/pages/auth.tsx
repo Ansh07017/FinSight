@@ -13,10 +13,6 @@ import authBg from "@assets/generated_images/dark_minimalist_abstract_geometric_
 import logoImg from "@assets/generated_images/minimalist_mint_green_rupee_logo_symbol.png";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
-// NOTE: We need the context from the new location, but only for the handleLogin function (future change)
-// import { useAuth } from '@/context/AuthContext'; 
-
-
 export default function AuthPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -37,17 +33,16 @@ export default function AuthPage() {
     setIsLoading(true);
     
     try {
-      // 🛑 OLD, INEFFICIENT LOGIN LOGIC 🛑
-      await auth.login(loginUsername, loginPassword);
+      // Client expects { user: { id, username, needsOnboarding: boolean } } from the server
+      const response = await auth.login(loginUsername, loginPassword);
       
-      // Check if user has completed onboarding (2nd API call - INEFFICIENCY)
-      try {
-        const profileData = await auth.me(); // THIS IS THE REDUNDANT CALL
-        // In a real app, we'd check if they have a profile
+      // Check response to see where to redirect (FIXED REDIRECTION LOGIC)
+      if (response && response.user && response.user.needsOnboarding) {
         setLocation("/onboarding");
-      } catch {
-        setLocation("/onboarding");
+      } else {
+        setLocation("/"); // Go to Dashboard
       }
+      
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -64,6 +59,7 @@ export default function AuthPage() {
     setIsLoading(true);
     
     try {
+      // The register API also returns the needsOnboarding flag
       await auth.register(registerUsername, registerPassword);
       toast({
         title: "Account Created",
@@ -82,7 +78,6 @@ export default function AuthPage() {
   };
 
   return (
-    // ... (Your existing AuthPage JSX remains unchanged)
     <div className="min-h-screen w-full flex bg-background">
       {/* Left Side - Visual */}
       <div className="hidden lg:flex w-1/2 relative bg-black items-center justify-center overflow-hidden">
@@ -103,7 +98,6 @@ export default function AuthPage() {
       {/* Right Side - Form */}
       <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-background">
         <Card className="w-full max-w-md border-border/50 bg-card/50 backdrop-blur-sm shadow-2xl">
-          {/* ... rest of Card, Tabs, and Forms ... */}
           <CardHeader className="space-y-1 text-center">
             <div className="lg:hidden mx-auto w-12 h-12 mb-4 rounded-xl bg-primary/10 flex items-center justify-center">
               <img src={logoImg} alt="Logo" className="w-8 h-8" />
@@ -122,7 +116,43 @@ export default function AuthPage() {
               
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
-                  {/* ... Login form fields ... */}
+                  {/* Login Username */}
+                  <div className="space-y-2">
+                    <Label htmlFor="login-username">Username</Label>
+                    <Input
+                      id="login-username"
+                      type="text"
+                      placeholder="e.g., fin_user_99" 
+                      value={loginUsername}
+                      onChange={(e) => setLoginUsername(e.target.value)}
+                      className="bg-secondary/50 border-border"
+                      required
+                    />
+                  </div>
+
+                  {/* Login Password */}
+                  <div className="space-y-2 relative">
+                    <Label htmlFor="login-password">Password</Label>
+                    <Input
+                      id="login-password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password" 
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="bg-secondary/50 border-border pr-10"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-[29px] h-9 w-9 p-0 text-muted-foreground hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+
                   <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-black font-semibold" disabled={isLoading}>
                     {isLoading ? (
                       <>
@@ -137,8 +167,44 @@ export default function AuthPage() {
               </TabsContent>
               
               <TabsContent value="register">
-                {/* ... Register form fields ... */}
                 <form onSubmit={handleRegister} className="space-y-4">
+                  {/* Register Username */}
+                  <div className="space-y-2">
+                    <Label htmlFor="register-username">Username</Label>
+                    <Input
+                      id="register-username"
+                      type="text"
+                      placeholder="Choose a unique username" 
+                      value={registerUsername}
+                      onChange={(e) => setRegisterUsername(e.target.value)}
+                      className="bg-secondary/50 border-border"
+                      required
+                    />
+                  </div>
+
+                  {/* Register Password */}
+                  <div className="space-y-2 relative">
+                    <Label htmlFor="register-password">Password</Label>
+                    <Input
+                      id="register-password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Create a strong password" 
+                      value={registerPassword}
+                      onChange={(e) => setRegisterPassword(e.target.value)}
+                      className="bg-secondary/50 border-border pr-10"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-[29px] h-9 w-9 p-0 text-muted-foreground hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  
                   <Button 
                     type="submit" 
                     className="w-full bg-primary hover:bg-primary/90 text-black font-semibold"
@@ -158,6 +224,7 @@ export default function AuthPage() {
             </Tabs>
           </CardContent>
         </Card>
+        
       </div>
     </div>
   );

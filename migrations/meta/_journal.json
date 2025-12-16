@@ -15,6 +15,13 @@
       "when": 1765318365575,
       "tag": "0001_crazy_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1765688079685,
+      "tag": "0002_sharp_frog_thor",
+      "breakpoints": true
     }
   ]
 }

@@ -4,8 +4,9 @@ dotenv.config();
 import { drizzle } from "drizzle-orm/node-postgres";
 import pkg from "pg";
 const { Pool } = pkg;
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, gte,lt } from "drizzle-orm";
 import * as schema from "../shared/schema.ts";
+
 import type {
   User,
   InsertUser,
@@ -16,8 +17,17 @@ import type {
   UserSettings,
   InsertUserSettings,
 } from "../shared/schema.ts";
-// Assuming transactions is not used here, removing the unused import
-// import { transactions } from '@/lib/api.ts'; 
+
+const DAILY_XP_CAP = 500; // Max XP a user can earn from B-SAVE per day
+const XP_RATE_PER_RUPEE = 1; // 1 XP per rupee saved (e.g., 50 estimated amount = 50 XP)
+
+const getDayBounds = () => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 1);
+    return { start, end };
+};
  
 
 const pool = new Pool({
@@ -35,11 +45,14 @@ export interface IStorage {
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<void>;
   
+  checkSavingsVelocity(userId: string, amount: number): Promise<boolean>;
+  logBehavioralSavings(userId: string, behaviorType: string, estimatedAmount: number): Promise<{ xpEarned: number, logId: string }>;
+
   // User Profile methods
   getUserProfile(userId: string): Promise<UserProfile | undefined>;
   createUserProfile(profile: InsertUserProfile): Promise<UserProfile>;
   updateUserProfile(userId: string, data: Partial<InsertUserProfile>): Promise<UserProfile | undefined>;
-
+    
   // Transaction methods
   getTransactions(userId: string): Promise<Transaction[]>;
   getTransaction(id: string): Promise<Transaction | undefined>;
@@ -51,7 +64,6 @@ export interface IStorage {
   createUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
   updateUserSettings(userId: string, data: Partial<InsertUserSettings>): Promise<UserSettings | undefined>;
 
-  // Analytics methods (Removed old getMonthlyStats)
   getDashboardData(userId: string, startDate: Date, endDate: Date): Promise<{
     income: number;
     expense: number;
@@ -64,12 +76,64 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   // User methods
+async checkSavingsVelocity(userId: string, amount: number): Promise<boolean> {
+        const { start, end } = getDayBounds();
+
+        // 1. Calculate current B-SAVE XP earned today
+        const result = await db.select({ totalXp: sql<number>`sum(${schema.behavioralSavings.xpAwarded})` })
+            .from(schema.behavioralSavings)
+            .where(and(
+                eq(schema.behavioralSavings.userId, userId),
+                gte(schema.behavioralSavings.loggedAt, start),
+                lt(schema.behavioralSavings.loggedAt, end)
+            ));
+
+        const currentXp = result[0]?.totalXp || 0;
+        
+        const newXp = Math.min(amount * XP_RATE_PER_RUPEE, DAILY_XP_CAP);
+        
+        // 3. Check if new XP will exceed the cap
+        return (currentXp + newXp) <= DAILY_XP_CAP;
+    }
+
+    async logBehavioralSavings(userId: string, behaviorType: string, estimatedAmount: number): Promise<{ xpEarned: number, logId: string }> {
+        
+        // Use the checkSavingsVelocity helper to prevent abuse
+        const canLog = await this.checkSavingsVelocity(userId, estimatedAmount);
+        if (!canLog) {
+            // Throw an error that the route handler will catch and convert to 429
+            throw new Error("Daily limit reached. Cannot log more behavioral savings today.");
+        }
+        
+        // Calculate XP earned (capped by the daily cap logic inside checkSavingsVelocity)
+        const xpEarned = Math.round(estimatedAmount * XP_RATE_PER_RUPEE);
+
+        // 1. Log the behavioral saving
+        const [newLog] = await db.insert(schema.behavioralSavings).values({
+            userId,
+            behaviorType,
+            estimatedAmount: estimatedAmount.toString(),
+            xpAwarded: xpEarned,
+        }).returning({ id: schema.behavioralSavings.id });
+
+        // 2. Update the user's total reward points in the userProfiles table
+        await db.update(schema.userProfiles)
+            .set({ 
+                rewardPoints: sql`${schema.userProfiles.rewardPoints} + ${xpEarned}` 
+            })
+            .where(eq(schema.userProfiles.userId, userId));
+            
+        return { 
+            xpEarned, 
+            logId: newLog.id 
+        };
+    }
+
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(schema.users).where(eq(schema.users.id, id));
     return user;
   }
 
-// FIX 2: Implementation for deleteUser (Uses a transaction to ensure clean deletion)
 async deleteUser(id: string): Promise<void> {
     await db.transaction(async (tx) => {
         const userId = id;
@@ -116,7 +180,7 @@ async deleteUser(id: string): Promise<void> {
   }
 
   async createUserProfile(profile: InsertUserProfile): Promise<UserProfile> {
-    const [newProfile] = await db.insert(schema.userProfiles).values(profile).returning();
+    const [newProfile] = await db.insert(schema.userProfiles).values(profile as any).returning();
     return newProfile;
   }
 
@@ -126,11 +190,13 @@ async deleteUser(id: string): Promise<void> {
   ): Promise<UserProfile | undefined> {
     const [profile] = await db
       .update(schema.userProfiles)
-      .set(data)
+      .set(data as any)
       .where(eq(schema.userProfiles.userId, userId))
       .returning();
     return profile;
   }
+
+
 
   // Transaction methods
   async getTransactions(userId: string): Promise<Transaction[]> {
@@ -261,7 +327,6 @@ async deleteUser(id: string): Promise<void> {
         };
     }
 
-    // Removed the old getMonthlyStats method which is now replaced by getDashboardData
 }
 
 export const storage = new DatabaseStorage();

@@ -7,6 +7,7 @@ import {
   LayoutDashboard, 
   Wallet, 
   Trophy, 
+    TrendingUp,
   Settings, 
   Menu, 
   LogOut,
@@ -20,6 +21,7 @@ import logoImg from "@assets/generated_images/minimalist_mint_green_rupee_logo_s
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
   { icon: Wallet, label: "Expenses", href: "/expenses" },
+  { icon: TrendingUp, label: "Behavioral Savings", href: "/behavioralSavings" },
   { icon: Trophy, label: "Rewards", href: "/rewards" },
   { icon: FileBarChart, label: "Reports", href: "/reports" },
   { icon: Settings, label: "Settings", href: "/settings" },

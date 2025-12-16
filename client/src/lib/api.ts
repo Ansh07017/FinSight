@@ -106,6 +106,22 @@ export const reports = {
     apiRequest(`/api/reports/monthly?year=${year}&month=${month}`),
 };
 
+interface LogSavingsData {
+    behaviorType: string; 
+    estimatedAmount: string; 
+}
+
+const logSavings = (data: LogSavingsData): Promise<any> => {
+    return apiRequest("/api/behavioral/savings", {
+        method: "POST",
+        body: JSON.stringify(data),
+    });
+};
+
+export const behavioral = {
+    logSavings,
+};
+
 // Settings APIs
 export const settings = {
   get: () => apiRequest("/api/settings"),
