@@ -1,296 +1,283 @@
-import { useState } from "react";
+// client/src/pages/ExpensesPage.tsx
+
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { IndianRupee, Plus, Search, Filter, ArrowUpRight, ArrowDownRight, Loader2, Trash2 } from "lucide-react";
-import { transactions } from "@/lib/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Search, Filter, ArrowUpRight, ArrowDownRight, Loader2, Trash2, Calendar as CalendarIcon } from "lucide-react";
+import { transactions, settings } from "@/lib/api"; 
 import { useToast } from "@/hooks/use-toast";
 
+// --- NEW: Currency Symbol Helper ---
+const getCurrencySymbol = (currencyCode: string | undefined) => {
+    switch (currencyCode) {
+        case 'USD': return '$';
+        case 'EUR': return '€';
+        case 'GBP': return '£';
+        default: return '₹';
+    }
+};
+
 export default function ExpensesPage() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("expense");
-  
-  // Form state
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("");
-  const [paymentMode, setPaymentMode] = useState("");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("expense");
+  
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
 
-  const { data: transactionList = [], isLoading } = useQuery({
-    queryKey: ["transactions"],
-    queryFn: transactions.list,
-  });
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [date, setdate] = useState("");
+  const [category, setCategory] = useState("");
+  const [paymentMode, setPaymentMode] = useState("");
 
-  const createMutation = useMutation({
-    mutationFn: transactions.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      toast({
-        title: "Transaction added",
-        description: "Your transaction has been recorded successfully.",
-      });
-      setIsDialogOpen(false);
-      setAmount("");
-      setDescription("");
-      setCategory("");
-      setPaymentMode("");
-    },
-    onError: (error: Error) => {
-      toast({
-        variant: "destructive",
-        title: "Failed to add transaction",
-        description: "Error: " + error.message,
-      });
-    },
-  });
+  // 1. Fetch Transactions
+  const { data: transactionList = [], isLoading: txLoading } = useQuery({
+    queryKey: ["transactions"],
+    queryFn: transactions.list,
+  });
 
-  const deleteMutation = useMutation({
-    mutationFn: transactions.delete,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      toast({
-        title: "Transaction deleted",
-        description: "The transaction has been removed.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        variant: "destructive",
-        title: "Failed to delete transaction",
-        description: error.message,
-      });
-    },
-  });
+  // 2. Fetch Settings for Currency Sync
+  const { data: userSettings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: settings.get,
+  });
 
-  const handleAddTransaction = () => {
-    if (!amount || !description || !category || !paymentMode) {
-        toast({
-            variant: "destructive",
-            title: "Missing fields",
-            description: "Please fill in Amount, Description, Category, and Payment Mode.",
-        });
+  const currencySymbol = getCurrencySymbol(userSettings?.currency);
+
+  const filteredTransactions = useMemo(() => {
+    return transactionList
+      .filter((tx: any) => {
+        const title = tx.title || "";
+        const matchesSearch = title.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesCategory = filterCategory === "all" || tx.category === filterCategory;
+        return matchesSearch && matchesCategory;
+      })
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [transactionList, searchQuery, filterCategory]);
+
+  const createMutation = useMutation({
+    mutationFn: transactions.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      toast({ title: "Transaction added", description: "Successfully recorded." });
+      setIsDialogOpen(false);
+      resetForm();
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Failed", description: error.message });
+    },
+  });
+
+  const resetForm = () => {
+    setAmount("");
+    setDescription("");
+    setdate("");
+    setCategory("");
+    setPaymentMode("");
+  };
+
+  const handleAddTransaction = () => {
+    if (!amount || !description || !category || !paymentMode) {
+        toast({ variant: "destructive", title: "Missing fields" });
         return;
     }
 
-    // Prepare payload to match updated server schema (amount as number, date as Date object)
-    createMutation.mutate({
-      title: description,
-      category,
-      // FIX 1: Send amount as a number (parseFloat converts the string input)
-      amount: parseFloat(amount).toFixed(2), 
-      
-      // FIX 2: Send the current DATE as a Date object
-      date: new Date(), 
-      
-      // FIX 3: Ensure the correct field name 'paymentMode' is used
-      paymentMode: paymentMode, 
-      
-      type: activeTab
-    });
-  };
+    const parsedDate = date ? new Date(date) : new Date();
+    if (isNaN(parsedDate.getTime())) {
+      toast({ variant: "destructive", title: "Invalid Date", description: "Use YYYY-MM-DD" });
+      return;
+    }
 
-  const handleDeleteTransaction = (id: string) => {
-    deleteMutation.mutate(id);
-  };
+    createMutation.mutate({
+      title: description,
+      category,
+      amount: amount, 
+      date: parsedDate.toISOString(), 
+      paymentMode: paymentMode, 
+      type: activeTab
+    });
+  };
 
-  return (
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Transactions</h1>
-            <p className="text-muted-foreground">Track and manage your income and expenses</p>
-          </div>
-          
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary text-black hover:bg-primary/90 font-semibold">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Transaction
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card border-border text-white sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Add New Transaction</DialogTitle>
-              </DialogHeader>
-              
-              <Tabs defaultValue="expense" value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-secondary/50">
-                  <TabsTrigger value="expense">Expense</TabsTrigger>
-                  <TabsTrigger value="income">Income</TabsTrigger>
-                </TabsList>
-                
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label>Amount</Label>
-                    <div className="relative">
-                      <IndianRupee className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                      <Input 
-                        placeholder="0.00" 
-                        className="pl-10 bg-secondary border-border" 
-                        type="number" 
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Input 
-                      placeholder={activeTab === "expense" ? "What did you buy?" : "Source of income?"}
-                      className="bg-secondary border-border" 
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Category</Label>
-                    <Select value={category} onValueChange={setCategory}>
-                      <SelectTrigger className="bg-secondary border-border">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {activeTab === "expense" ? (
-                          <>
-                            <SelectItem value="Food">Food & Dining</SelectItem>
-                            <SelectItem value="Transport">Transport</SelectItem>
-                            <SelectItem value="Shopping">Shopping</SelectItem>
-                            <SelectItem value="Bills">Bills & Utilities</SelectItem>
-                            <SelectItem value="Entertainment">Entertainment</SelectItem>
-                          </>
-                        ) : (
-                          <>
-                            <SelectItem value="Salary">Salary</SelectItem>
-                            <SelectItem value="Papa">Papa (Family)</SelectItem>
-                            <SelectItem value="Freelance">Freelance</SelectItem>
-                            <SelectItem value="Pocket Money">Pocket Money</SelectItem>
-                            <SelectItem value="Investment">Investment</SelectItem>
-                            <SelectItem value="Gift">Gift</SelectItem>
-                            <SelectItem value="Other">Other</SelectItem>
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Payment Mode</Label>
-                    <Select value={paymentMode} onValueChange={setPaymentMode}>
-                      <SelectTrigger className="bg-secondary border-border">
-                        <SelectValue placeholder="Select payment mode" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        <SelectItem value="UPI">UPI</SelectItem>
-                        <SelectItem value="Credit Card">Credit Card</SelectItem>
-                        <SelectItem value="Debit Card">Debit Card</SelectItem>
-                        <SelectItem value="Cash">Cash</SelectItem>
-                        <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button 
-                    className="w-full bg-primary text-black hover:bg-primary/90 mt-4"
-                    onClick={handleAddTransaction}
-                    disabled={createMutation.isPending}
-                  >
-                    {createMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      `Save ${activeTab === "expense" ? "Expense" : "Income"}`
-                    )}
-                  </Button>
-                </div>
-              </Tabs>
-            </DialogContent>
-          </Dialog>
-        </div>
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Transactions</h1>
+          <p className="text-muted-foreground">Manage your flow in {userSettings?.currency || "INR"}</p>
+        </div>
+        
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-[#00D4AA] text-black hover:bg-[#00D4AA]/90 font-black shadow-lg shadow-[#00D4AA]/10">
+              <Plus className="w-5 h-5 mr-2" /> Add Transaction
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-card border-border text-white sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold">New Entry</DialogTitle>
+              <DialogDescription>Input your financial activity below.</DialogDescription>
+            </DialogHeader>
+            <Tabs defaultValue="expense" value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 bg-secondary/50 p-1 border border-border/50">
+                <TabsTrigger value="expense" className="data-[state=active]:bg-red-500 data-[state=active]:text-white">Expense</TabsTrigger>
+                <TabsTrigger value="income" className="data-[state=active]:bg-[#00D4AA] data-[state=active]:text-black">Income</TabsTrigger>
+              </TabsList>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Amount ({userSettings?.currency || "INR"})</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-muted-foreground font-mono">{currencySymbol}</span>
+                    <Input 
+                      placeholder="0.00" 
+                      className="pl-8 bg-secondary/50 border-border focus:ring-[#00D4AA]" 
+                      type="number" 
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Description</Label>
+                  <Input 
+                    placeholder={activeTab === "expense" ? "e.g. Starbucks Coffee" : "e.g. Monthly Salary"}
+                    className="bg-secondary/50 border-border" 
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Date</Label>
+                  <Input type="date" className="bg-secondary/50 border-border" value={date} onChange={(e) => setdate(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Category</Label>
+                  <Select value={category} onValueChange={setCategory}>
+                    <SelectTrigger className="bg-secondary/50 border-border"><SelectValue placeholder="Select Category" /></SelectTrigger>
+                    <SelectContent className="bg-card border-border text-white">
+                      {activeTab === "expense" ? (
+                        <>
+                          <SelectItem value="Food">Food & Dining</SelectItem>
+                          <SelectItem value="Transport">Transport</SelectItem>
+                          <SelectItem value="Shopping">Shopping</SelectItem>
+                          <SelectItem value="Bills">Bills & Utilities</SelectItem>
+                          <SelectItem value="Entertainment">Entertainment</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="Salary">Salary</SelectItem>
+                          <SelectItem value="Freelance">Freelance</SelectItem>
+                          <SelectItem value="Investments">Investments</SelectItem>
+                          <SelectItem value="Other">Other Income</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Payment Mode</Label>
+                  <Select value={paymentMode} onValueChange={setPaymentMode}>
+                    <SelectTrigger className="bg-secondary/50 border-border"><SelectValue placeholder="Select Mode" /></SelectTrigger>
+                    <SelectContent className="bg-card border-border text-white">
+                      <SelectItem value="UPI">UPI / Digital</SelectItem>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="Card">Credit/Debit Card</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button 
+                    className={`w-full font-black mt-4 py-6 transition-all ${activeTab === 'expense' ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-[#00D4AA] hover:bg-[#00D4AA]/90 text-black'}`} 
+                    onClick={handleAddTransaction} 
+                    disabled={createMutation.isPending}
+                >
+                  {createMutation.isPending ? <Loader2 className="animate-spin mr-2" /> : "Confirm Transaction"}
+                </Button>
+              </div>
+            </Tabs>
+          </DialogContent>
+        </Dialog>
+      </div>
 
-        <Card className="bg-card border-border/50">
-          <CardContent className="p-4">
-            <div className="flex gap-4 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search transactions..." className="pl-9 bg-secondary/50 border-border" />
-              </div>
-              <Button variant="outline" className="border-border text-muted-foreground hover:text-white hover:bg-secondary">
-                <Filter className="w-4 h-4 mr-2" />
-                Filters
-              </Button>
-            </div>
+      <Card className="bg-card border-border/50 shadow-xl overflow-hidden">
+        <CardContent className="p-0">
+          <div className="flex flex-col md:flex-row gap-4 p-6 bg-secondary/10 border-b border-border/50">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search records..." className="pl-9 bg-secondary/50 border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            </div>
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className="w-full md:w-[220px] bg-secondary/50 border-border">
+                <Filter className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Category Filter" />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border text-white">
+                <SelectItem value="all">All Transactions</SelectItem>
+                <SelectSeparator />
+                <SelectGroup>
+                  <SelectLabel className="text-[#00D4AA]">Income</SelectLabel>
+                  <SelectItem value="Salary">Salary</SelectItem>
+                  <SelectItem value="Freelance">Freelance</SelectItem>
+                </SelectGroup>
+                <SelectSeparator />
+                <SelectGroup>
+                  <SelectLabel className="text-red-400">Expense</SelectLabel>
+                  <SelectItem value="Food">Food & Dining</SelectItem>
+                  <SelectItem value="Shopping">Shopping</SelectItem>
+                  <SelectItem value="Transport">Transport</SelectItem>
+                  <SelectItem value="Bills">Bills & Utilities</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
 
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : transactionList.length === 0 ? (
-              <div className="text-center text-muted-foreground py-12">
-                No transactions yet. Add your first transaction to get started!
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="grid grid-cols-12 text-sm font-medium text-muted-foreground px-4 py-2">
-                  <div className="col-span-5 md:col-span-4">Description</div>
-                  <div className="col-span-3 md:col-span-2">Category</div>
-                  <div className="hidden md:block col-span-2">Date</div>
-                  <div className="hidden md:block col-span-1">Mode</div>
-                  <div className="col-span-4 md:col-span-2 text-right">Amount</div>
-                  <div className="hidden md:block col-span-1"></div>
-                </div>
-                
-                {transactionList.map((tx: any) => (
-                  <div key={tx.id} className="grid grid-cols-12 items-center p-4 rounded-lg bg-secondary/20 hover:bg-secondary/40 transition-colors border border-transparent hover:border-primary/20">
-                    <div className="col-span-5 md:col-span-4 font-medium text-white truncate pr-2 flex items-center gap-2">
-                      <div className={`p-1.5 rounded-full ${tx.type === 'income' ? 'bg-success/20 text-success' : 'bg-red-500/20 text-red-500'}`}>
-                        {tx.type === 'income' ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
-                      </div>
-                      {tx.title}
-                    </div>
-                    <div className="col-span-3 md:col-span-2">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        tx.type === 'income' ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'
-                      }`}>
-                        {tx.category}
-                      </span>
-                    </div>
-                    <div className="hidden md:block col-span-2 text-sm text-muted-foreground">
-                      {new Date(tx.date).toLocaleDateString()}
-                    </div>
-                    <div className="hidden md:block col-span-1 text-sm text-muted-foreground">
-                      {tx.paymentMode}
-                    </div>
-                    <div className={`col-span-4 md:col-span-2 text-right font-semibold flex justify-end items-center ${
-                      tx.type === 'income' ? 'text-success' : 'text-white'
-                    }`}>
-                      <IndianRupee className="w-3 h-3 mr-0.5" />
-                      {parseFloat(tx.amount).toLocaleString()}
-                    </div>
-                    <div className="hidden md:flex col-span-1 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                        onClick={() => handleDeleteTransaction(tx.id)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-  );
+          <div className="divide-y divide-border/20">
+            {txLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                 <Loader2 className="w-10 h-10 animate-spin text-[#00D4AA]" />
+                 <p className="text-muted-foreground animate-pulse">Syncing Ledger...</p>
+              </div>
+            ) : filteredTransactions.length > 0 ? (
+              filteredTransactions.map((tx: any) => (
+                <div key={tx.id} className="grid grid-cols-12 items-center p-5 hover:bg-[#00D4AA]/5 transition-all group border-l-4 border-transparent hover:border-[#00D4AA]">
+                  <div className="col-span-7 md:col-span-5 font-bold text-white flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tx.type === 'income' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+                      {tx.type === 'income' ? <ArrowDownRight className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-sm md:text-base leading-tight">{tx.title}</span>
+                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">{tx.category}</span>
+                    </div>
+                  </div>
+                  <div className="hidden md:flex col-span-3 items-center gap-2 text-xs text-muted-foreground font-medium">
+                      <CalendarIcon className="w-3 h-3" />
+                      {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </div>
+                  <div className="hidden lg:flex col-span-1 text-xs text-muted-foreground">
+                      <span className="px-2 py-0.5 bg-secondary/50 rounded-md border border-border/50">{tx.paymentMode}</span>
+                  </div>
+                  <div className={`col-span-5 md:col-span-3 text-right font-mono font-black text-base md:text-lg ${tx.type === 'income' ? 'text-[#00D4AA]' : 'text-white'}`}>
+                    <span className="text-xs mr-1 opacity-70 font-sans">{currencySymbol}</span>
+                    {parseFloat(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              ))
+            ) : (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground italic">
+                    <Search className="w-10 h-10 mb-2 opacity-20" />
+                    No transactions matching your criteria.
+                </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }

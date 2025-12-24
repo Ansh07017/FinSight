@@ -7,7 +7,7 @@ import {
   LayoutDashboard, 
   Wallet, 
   Trophy, 
-    TrendingUp,
+  TrendingUp,
   Settings, 
   Menu, 
   LogOut,
@@ -27,13 +27,11 @@ const navItems = [
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
-// --- HELPER FUNCTION (Copied from SettingsPage.tsx) ---
 const getAvatarUrl = (profileData: any): string => {
-    // We assume the user profile fetched by useAuth holds the nested data if available
+    
     const firstName = profileData?.firstName;
     const username = profileData?.username; 
     
-    // Check if userProfile is present and destructure based on AuthContext's output structure
     const seed = firstName || username || 'Default';
     
     if (seed === 'Default') {
@@ -126,7 +124,7 @@ useEffect(() => {
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 border-b border-border bg-card/80 backdrop-blur-md z-50 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <img src={logoImg} alt="FinSaver" className="w-6 h-6" />
-          <span className="font-bold text-white">FinSaver</span>
+          <span className="font-bold text-white">FinSight</span>
         </div>
         <Sheet>
           <SheetTrigger asChild>

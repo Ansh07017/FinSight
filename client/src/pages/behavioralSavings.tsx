@@ -1,244 +1,281 @@
 // client/src/pages/BehavioralSavingsPage.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress"; // Assuming you have a Progress component
-import { Textarea } from "@/components/ui/textarea"; // Assuming you have a Textarea component
-import { Loader2, Zap, CheckCircle, TrendingUp, Target } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Zap, CheckCircle, TrendingUp, Target, History, Calendar, Info } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { behavioral } from "@/lib/api"; 
-import { dashboard } from "@/lib/api"; 
+import { behavioral } from "@/lib/api";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
-// Define the expected structure returned by logSavings route/storage
 interface LogSavingsSuccessData {
     message: string;
     xpEarned: number;
     logId: string;
 }
 
-// Data type sent to the mutation function
 interface LogSavingsVariables {
-    estimatedAmount: string; 
+    estimatedAmount: string;
     behaviorType: string;
-    customDescription?: string; // New field for custom input
+    customDescription?: string;
 }
 
-// List of common behaviors (simplified for quick selection)
 const QUICK_BEHAVIORS = [
-    { type: 'packed_lunch', label: 'Packed Lunch (₹100)' },
-    { type: 'walked_to_work', label: 'Walked/Cycled (₹50)' },
-    { type: 'reused_item', label: 'Reused/Repaired (₹200)' },
-    { type: 'avoided_impulse', label: 'Avoided Impulse (₹500)' },
+    { type: 'packed_lunch', label: 'Packed Lunch (₹100)', value: "100" },
+    { type: 'walked_to_work', label: 'Walked/Cycled (₹50)', value: "50" },
+    { type: 'reused_item', label: 'Reused/Repaired (₹200)', value: "200" },
+    { type: 'avoided_impulse', label: 'Avoided Impulse (₹500)', value: "500" },
 ];
 
-// Placeholder for Daily XP Cap (must match server/storage.ts)
-const DAILY_XP_CAP = 500; 
-// const XP_RATE_PER_RUPEE = 1; // Not needed on client
+const DAILY_XP_CAP = 500;
 
 export default function BehavioralSavingsPage() {
     const { toast } = useToast();
+    const queryClient = useQueryClient();
     const [estimatedAmount, setEstimatedAmount] = useState('');
     const [behaviorType, setBehaviorType] = useState('');
     const [customDescription, setCustomDescription] = useState('');
-    
-    // Placeholder for total XP earned today from B-SAVE 
-    // In a real app, this value would come from the dashboard query response.
-    const xpToday = 0; 
+    const [timeRange, setTimeRange] = useState('7');
 
-    const xpProgress = Math.round((xpToday / DAILY_XP_CAP) * 100);
+    const { data: savingsHistory, isLoading: historyLoading } = useQuery({
+        queryKey: ["behavioral-history"],
+        queryFn: async () => {
+            const res = await fetch("/api/behavioral/savings"); 
+            if (!res.ok) return [];
+            return res.json();
+        }
+    });
+
+    const filteredHistory = useMemo(() => {
+        if (!savingsHistory || !Array.isArray(savingsHistory)) return [];
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - parseInt(timeRange));
+        
+        return [...savingsHistory]
+            .filter((log: any) => new Date(log.loggedAt) >= cutoff)
+            .sort((a, b) => new Date(a.loggedAt).getTime() - new Date(b.loggedAt).getTime());
+    }, [savingsHistory, timeRange]);
+
+    const xpToday = useMemo(() => {
+        if (!savingsHistory || !Array.isArray(savingsHistory)) return 0;
+        const today = new Date().toDateString();
+        return savingsHistory
+            .filter((log: any) => new Date(log.loggedAt).toDateString() === today)
+            .reduce((sum: number, log: any) => sum + (log.xpAwarded || 0), 0);
+    }, [savingsHistory]);
+
+    const xpProgress = Math.min(Math.round((xpToday / DAILY_XP_CAP) * 100), 100);
 
     const logSavingsMutation = useMutation<LogSavingsSuccessData, Error, LogSavingsVariables>({
         mutationFn: (data) => behavioral.logSavings(data),
-        
-        onSuccess: (data) => { 
+        onSuccess: (data) => {
             toast({
                 title: "✅ Win Logged!",
-                description: `You earned ${data.xpEarned} XP instantly! Keep the streak going.`,
+                description: `You earned ${data.xpEarned} XP instantly!`,
             });
-            // Reset form state
             setEstimatedAmount('');
             setBehaviorType('');
             setCustomDescription('');
-            // Optional: queryClient.invalidateQueries({ queryKey: ["dashboard"] }); 
+            queryClient.invalidateQueries({ queryKey: ["behavioral-history"] });
+            queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         },
-        
-        onError: (error) => {
+        // CRITICAL UPDATE: Handle daily limit error response
+        onError: (error: any) => {
             toast({
                 variant: "destructive",
-                title: "Logging Failed",
-                description: error.message.includes("Daily limit") 
-                    ? "Daily XP limit reached for behavioral savings. Check back tomorrow!"
-                    : error.message || "Failed to log behavioral saving.",
+                title: "Logging Denied",
+                description: error.message || "Daily limit reached. Try again tomorrow!",
             });
         },
     });
 
     const handleLogSubmission = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!estimatedAmount || (!behaviorType && !customDescription)) {
-            toast({
-                variant: "destructive",
-                title: "Missing Details",
-                description: "Please select a quick behavior OR enter a custom description, and provide an estimated amount.",
-            });
-            return;
-        }
-        
-        // Use the selected type or the custom description as the behaviorType if custom is used
         const finalBehaviorType = customDescription || behaviorType;
-        
         logSavingsMutation.mutate({
             behaviorType: finalBehaviorType,
             estimatedAmount: estimatedAmount,
-            customDescription: customDescription || undefined,
         });
     };
-    
-    const selectQuickBehavior = (type: string) => {
-        setBehaviorType(type);
-        setCustomDescription(''); // Clear custom description when a quick log is selected
-        // Set estimated amount based on Quick Log value (simple parsing for the example)
-        const selected = QUICK_BEHAVIORS.find(b => b.type === type);
-        if (selected) {
-            const valueMatch = selected.label.match(/\((\₹)(\d+)\)/);
-            if (valueMatch && valueMatch[2]) {
-                 setEstimatedAmount(valueMatch[2]);
-            }
-        }
+
+    const selectQuickBehavior = (b: typeof QUICK_BEHAVIORS[0]) => {
+        setBehaviorType(b.type);
+        setCustomDescription('');
+        setEstimatedAmount(b.value);
     }
 
     return (
-        <div className="space-y-8 max-w-4xl mx-auto">
+        <div className="space-y-6 max-w-screen-2xl mx-auto p-4 h-full overflow-y-auto">
             <div className="flex items-center justify-between">
                 <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                    <TrendingUp className="w-7 h-7 text-accent" />
+                    <TrendingUp className="w-7 h-7 text-primary" />
                     B-SAVE Tracker <span className="text-xl text-muted-foreground">(Daily Wins)</span>
                 </h1>
+                
+                <div className="flex items-center gap-2 bg-secondary/20 p-1 rounded-lg border border-border/50">
+                    <Calendar className="w-4 h-4 text-muted-foreground ml-2" />
+                    <Select value={timeRange} onValueChange={setTimeRange}>
+                        <SelectTrigger className="w-[140px] border-none bg-transparent focus:ring-0 text-xs">
+                            <SelectValue placeholder="Select Range" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                            <SelectItem value="7">Last 7 Days</SelectItem>
+                            <SelectItem value="15">Last 15 Days</SelectItem>
+                            <SelectItem value="30">Last 30 Days</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
-            {/* Content Grid: 1/3 XP Card, 2/3 Log Form */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* 1. XP Progress Card (Matches Dashboard Theme) */}
-                <Card className="bg-card border-border/50 shadow-lg lg:col-span-1 h-fit">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-white flex items-center gap-2">
-                            <Target className="w-5 h-5 text-accent" />
-                            Daily XP Goal
-                        </CardTitle>
-                        <CardDescription>
-                            Your progress towards today's max behavioral XP.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="text-2xl font-bold text-accent">
-                            {xpToday} / {DAILY_XP_CAP} XP
-                        </div>
-                        {/* STYLE FIX: indicatorClassName="bg-accent" */}
-                        <Progress value={xpProgress} className="h-2 bg-secondary/50" indicatorClassName="bg-accent" />
-                        <p className="text-sm text-muted-foreground">
-                            {xpProgress}% complete. Every rupee saved counts!
-                        </p>
-                    </CardContent>
-                </Card>
-
-
-                {/* 2. Log Form Card (Matches Dashboard Theme) */}
-                <Card className="bg-card border-border/50 shadow-lg lg:col-span-2">
-                    <CardHeader>
-                        <CardTitle className="text-white flex items-center gap-2">
-                            <Zap className="w-5 h-5 text-accent" />
-                            Log Your Behavioral Win
-                        </CardTitle>
-                        <CardDescription>
-                            Quickly log a saving choice or enter a custom win.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleLogSubmission} className="space-y-6">
-                            
-                            {/* Quick Log Buttons */}
-                            <div className="space-y-2">
-                                <Label htmlFor="behavior">Quick Log Behavior</Label>
-                                <div className="grid grid-cols-2 gap-3">
+            <Card className="bg-card border-border/50 shadow-xl overflow-hidden min-h-[500px]">
+                <div className="grid grid-cols-1 lg:grid-cols-2 h-full">
+                    
+                    <div className="p-6 border-b lg:border-b-0 lg:border-r border-border/50 space-y-6">
+                        <CardHeader className="px-0 pt-0">
+                            <CardTitle className="text-white flex items-center gap-2 text-xl">
+                                <Zap className="w-5 h-5 text-primary" />
+                                Log Your Behavioral Win
+                            </CardTitle>
+                            <CardDescription>Enter your smart choices to earn XP.</CardDescription>
+                        </CardHeader>
+                        
+                        <form onSubmit={handleLogSubmission} className="space-y-4">
+                            <div className="space-y-3">
+                                <Label className="text-sm font-medium">Quick Log Behavior</Label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                                     {QUICK_BEHAVIORS.map((b) => (
                                         <Button
                                             key={b.type}
                                             type="button"
                                             variant={behaviorType === b.type ? "default" : "outline"}
-                                            // STYLE FIX: Use bg-accent for selected state
-                                            className={`justify-start h-auto p-3 text-left transition-colors text-white ${behaviorType === b.type ? 'bg-accent/80 text-black font-semibold hover:bg-accent' : 'border-border bg-secondary/50 hover:bg-secondary'}`}
-                                            onClick={() => selectQuickBehavior(b.type)}
+                                            className={`justify-start h-auto p-3 text-xs transition-all ${
+                                                behaviorType === b.type 
+                                                ? 'bg-primary text-black font-bold hover:bg-primary/90' 
+                                                : 'border-border bg-secondary/20 hover:bg-secondary/40 text-white'
+                                            }`}
+                                            onClick={() => selectQuickBehavior(b)}
                                         >
-                                            <CheckCircle className="w-4 h-4 mr-2" />
+                                            <CheckCircle className="w-3 h-3 mr-2 shrink-0" />
                                             {b.label}
                                         </Button>
                                     ))}
                                 </div>
                             </div>
-                            
-                            <div className="relative flex items-center pt-4 pb-4">
-                                <div className="grow border-t border-border/50"></div>
-                                <span className="shrink mx-4 text-sm text-muted-foreground">OR</span>
-                                <div className="grow border-t border-border/50"></div>
-                            </div>
 
-                            {/* Custom Behavior Input */}
                             <div className="space-y-2">
-                                <Label htmlFor="custom-description">Custom Behavior Description</Label>
+                                <Label htmlFor="custom-description">Custom Description</Label>
                                 <Textarea 
                                     id="custom-description"
-                                    placeholder="e.g., Skipped my morning coffee run and saved money."
+                                    placeholder="What did you save on today?"
                                     value={customDescription}
                                     onChange={(e) => {
                                         setCustomDescription(e.target.value);
-                                        setBehaviorType(''); // Clear quick log selection when typing custom
+                                        setBehaviorType('');
                                     }}
-                                    className="bg-secondary/50 border-border min-h-[60px]" 
+                                    className="bg-secondary/20 border-border focus:border-primary h-24 resize-none transition-all" 
                                 />
                             </div>
 
-                            {/* Estimated Amount */}
                             <div className="space-y-2">
-                                <Label htmlFor="amount">Estimated Savings Amount (₹)</Label>
+                                <Label htmlFor="amount">Estimated Savings (₹)</Label>
                                 <Input 
                                     id="amount"
                                     type="number"
-                                    placeholder="Enter estimated amount saved (e.g., 150)"
+                                    placeholder="Amount"
                                     value={estimatedAmount}
                                     onChange={(e) => setEstimatedAmount(e.target.value)} 
-                                    className="bg-secondary/50 border-border" 
+                                    className="bg-secondary/20 border-border focus:border-primary" 
                                     required
                                 />
                             </div>
 
                             <Button 
                                 type="submit" 
-                                // STYLE FIX: Use bg-accent for primary action button
-                                className="w-full bg-accent text-black hover:bg-accent/90 font-semibold"
-                                disabled={logSavingsMutation.isPending || !estimatedAmount || (!behaviorType && !customDescription)}
+                                className="w-full bg-primary text-black hover:bg-primary/90 font-bold py-6 text-lg shadow-lg shadow-primary/20 transition-all"
+                                disabled={logSavingsMutation.isPending || !estimatedAmount}
                             >
-                                {logSavingsMutation.isPending ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Logging Win...
-                                    </>
-                                ) : (
-                                    "Log Win & Get Instant XP"
-                                )}
+                                {logSavingsMutation.isPending ? <Loader2 className="animate-spin" /> : "Log Win & Get Instant XP"}
                             </Button>
                         </form>
-                    </CardContent>
-                </Card>
+                    </div>
+
+                    <div className="p-6 bg-secondary/5 flex flex-col justify-between space-y-6">
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-end">
+                                <div className="space-y-1">
+                                    <Label className="text-muted-foreground flex items-center gap-1 uppercase tracking-wider text-[10px]">
+                                        <Target className="w-3 h-3" /> Daily XP Status
+                                    </Label>
+                                    <div className="text-3xl font-black text-white">
+                                        {xpToday} <span className="text-sm font-normal text-muted-foreground">/ {DAILY_XP_CAP} XP</span>
+                                    </div>
+                                </div>
+                                <div className="text-primary font-bold">{xpProgress}%</div>
+                            </div>
+                            <Progress value={xpProgress} className="h-3 bg-secondary/30" indicatorClassName="bg-primary" />
+                            
+                            {xpToday >= DAILY_XP_CAP && (
+                                <div className="flex items-center gap-2 text-[10px] text-primary bg-primary/10 p-2 rounded border border-primary/20 animate-pulse">
+                                    <Info className="w-3 h-3" />
+                                    Daily XP Cap reached!
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="h-[280px] w-full flex flex-col space-y-2">
+                            <Label className="text-muted-foreground flex items-center gap-1 uppercase tracking-wider text-[10px]">
+                                <TrendingUp className="w-3 h-3" /> Savings Trend (Last {timeRange} Days)
+                            </Label>
+                            <div className="flex-1 bg-secondary/5 rounded-xl border border-border/30 p-2 overflow-hidden">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={filteredHistory}>
+                                        <defs>
+                                            <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#00D4AA" stopOpacity={0.3}/>
+                                                <stop offset="95%" stopColor="#00D4AA" stopOpacity={0}/>
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                                        <XAxis 
+                                            dataKey="loggedAt" 
+                                            tickFormatter={(val) => new Date(val).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                            stroke="#888"
+                                            fontSize={10}
+                                            tickLine={false}
+                                            axisLine={false}
+                                        />
+                                        <YAxis hide domain={[0, 'auto']} />
+                                        <Tooltip 
+                                            contentStyle={{ backgroundColor: '#111', borderColor: '#333', color: '#fff', fontSize: '12px' }}
+                                            itemStyle={{ color: '#00D4AA' }}
+                                            labelFormatter={(val) => new Date(val).toLocaleDateString()}
+                                        />
+                                        <Area 
+                                            type="monotone" 
+                                            dataKey="estimatedAmount" 
+                                            stroke="#00D4AA" 
+                                            fillOpacity={1} 
+                                            fill="url(#colorValue)" 
+                                            strokeWidth={3}
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </Card>
+
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pb-8">
+                <History className="w-3 h-3" />
+                <span>Self-reported wins have a daily cap of {DAILY_XP_CAP} XP.</span>
             </div>
-            
-            <p className="text-sm text-muted-foreground text-center pt-4">
-                This is a self-reported feature. XP earned is subject to a daily cap ({DAILY_XP_CAP} XP) to maintain fairness in the reward system.
-            </p>
         </div>
     );
 }

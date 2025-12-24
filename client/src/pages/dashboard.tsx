@@ -8,7 +8,7 @@ import { ArrowUpRight, ArrowDownRight, IndianRupee, TrendingUp, Target, Wallet, 
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, BarChart, Bar, Cell,LabelList } from "recharts";
 import { Link } from "wouter";
 // Assuming this is the correct path and import for your single dashboard API call
-import { dashboard } from "@/lib/api"; 
+import { dashboard, settings } from "@/lib/api"; 
 import { useToast } from "@/hooks/use-toast";
 
 // Helper function to safely get numeric value from a string
@@ -18,6 +18,16 @@ const safeParseFloat = (value: string | number | undefined, defaultValue: number
     return defaultValue;
 };
 
+// --- NEW: Currency Symbol Helper ---
+const getCurrencySymbol = (currencyCode: string | undefined) => {
+    switch (currencyCode) {
+        case 'USD': return '$';
+        case 'EUR': return '€';
+        case 'GBP': return '£';
+        default: return '₹';
+    }
+};
+
 export default function Dashboard() {
     const { toast } = useToast();
     
@@ -25,6 +35,12 @@ export default function Dashboard() {
     const { data, isLoading, error } = useQuery({
         queryKey: ["dashboard"],
         queryFn: dashboard.get,
+    });
+
+    // Added settings query to fetch user currency preference
+    const { data: settingsData } = useQuery({
+        queryKey: ["settings"],
+        queryFn: settings.get,
     });
 
     useEffect(() => {
@@ -47,16 +63,18 @@ export default function Dashboard() {
         recentTransactions = [],
     } = data || {};
 
+    const currencySymbol = getCurrencySymbol(settingsData?.currency);
+
     // 1. Core Stats (Dynamically pulled from API response fields)
     const totalBalance = safeParseFloat(profileData.currentBalance); 
     // Assuming monthlyStats.netSavings exists or calculating it here
-    const monthlySavings = safeParseFloat(statsData.netSavings); 
+    const monthlySavings = safeParseFloat(statsData.savings); 
     
     // Placeholder/Mock values for data not yet provided by the current monolithic API:
     const balanceChange = 5.2; // Requires previous month's data
     const savingsStatus = monthlySavings > 0 ? "On track for goal" : "Below target";
     const rewardPoints = safeParseFloat(profileData.rewardPoints || 1200);
-    const rewardTier = profileData.rewardTier || "Gold Tier Member";
+    const rewardTier = profileData.tier || "Gold Tier Member";
     const rewardProgress = safeParseFloat(profileData.rewardProgress || 75);
   
 
@@ -97,7 +115,7 @@ export default function Dashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-white flex items-center">
-                            <IndianRupee className="w-5 h-5 mr-1" />
+                            <span className="mr-1 text-primary">{currencySymbol}</span>
                             {totalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                         <p className={`text-xs mt-1 flex items-center ${balanceChange >= 0 ? 'text-success' : 'text-red-400'}`}>
@@ -115,7 +133,7 @@ export default function Dashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-white flex items-center">
-                            <IndianRupee className="w-5 h-5 mr-1" />
+                            <span className="mr-1 text-accent">{currencySymbol}</span>
                             {monthlySavings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                         <p className={`text-xs mt-1 flex items-center ${monthlySavings > 0 ? 'text-success' : 'text-red-400'}`}>
@@ -174,11 +192,12 @@ export default function Dashboard() {
                                             fontSize={12} 
                                             tickLine={false} 
                                             axisLine={false}
-                                            tickFormatter={(value) => `₹${value}`} 
+                                            tickFormatter={(value) => `${currencySymbol}${value}`} 
                                         />
                                         <Tooltip 
                                             contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid #333', borderRadius: '8px' }}
                                             itemStyle={{ color: '#fff' }}
+                                            formatter={(value: number) => [`${currencySymbol}${value.toLocaleString()}`, 'Spent']}
                                         />
                                         <Area 
                                             type="monotone" 
@@ -223,20 +242,20 @@ export default function Dashboard() {
                                         <Tooltip 
                                             cursor={{fill: 'rgba(255,255,255,0.05)'}}
                                             contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid #333', borderRadius: '8px' }}
-                                            formatter={(value: number) => [`₹${value.toLocaleString('en-IN')}`, 'Amount']}
+                                            formatter={(value: number) => [`${currencySymbol}${value.toLocaleString()}`, 'Amount']}
                                         />
                                         <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={32}>
                                             {expensesByCategory.map((entry: any, index: number) => (
                                                 <Cell key={`cell-${index}`} fill={entry.color} />
                                             ))}
                                             <LabelList 
-                            dataKey="value" 
-                            position="right" 
-                            fill="#FFFFFF" // White color for visibility
-                            fontSize={12}
-                            // Format the label to include the currency symbol
-                            formatter={(value: number) => `₹${value.toLocaleString('en-IN')}`}
-                        />
+                                            dataKey="value" 
+                                            position="right" 
+                                            fill="#FFFFFF" // White color for visibility
+                                            fontSize={12}
+                                            // Format the label to include the currency symbol
+                                            formatter={(value: number) => `${currencySymbol}${value.toLocaleString()}`}
+                                        />
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
@@ -262,15 +281,15 @@ export default function Dashboard() {
                                 <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors">
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-lg">
-                                            {tx.icon || "💳"}
+                                            {tx.type === 'income' ? '💰' : '💸'}
                                         </div>
                                         <div>
                                             <p className="font-medium text-white">{tx.title || tx.category}</p>
-                                            <p className="text-sm text-muted-foreground">{tx.date}</p>
+                                            <p className="text-sm text-muted-foreground">{new Date(tx.date).toLocaleDateString()}</p>
                                         </div>
                                     </div>
                                     <div className={`font-medium flex items-center ${tx.type === 'income' ? 'text-success' : 'text-white'}`}>
-                                        <IndianRupee className="w-3 h-3 mr-0.5" />
+                                        <span className="mr-0.5">{currencySymbol}</span>
                                         {safeParseFloat(tx.amount).toLocaleString()}
                                     </div>
                                 </div>
@@ -286,4 +305,3 @@ export default function Dashboard() {
         </div>
     );
 }
-

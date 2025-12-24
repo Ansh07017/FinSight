@@ -22,6 +22,20 @@
       "when": 1765688079685,
       "tag": "0002_sharp_frog_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1766422882280,
+      "tag": "0003_messy_clea",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1766610731292,
+      "tag": "0004_little_white_tiger",
+      "breakpoints": true
     }
   ]
 }
