@@ -39,6 +39,7 @@ const db = drizzle(pool, { schema });
 
 // FIX 1: Update the IStorage interface with the new dashboard method signature
 export interface IStorage {
+<<<<<<< HEAD
   // User methods
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -50,6 +51,15 @@ export interface IStorage {
   logBehavioralSavings(userId: string, behaviorType: string, estimatedAmount: number): Promise<{ xpEarned: number, logId: string }>;
   // NEW: Added for B-SAVE and Rewards sync
   getBehavioralSavings(userId: string): Promise<BehavioralSaving[]>;
+=======
+  // User methods
+  getUser(id: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByGoogleId(googleId: string): Promise<User | undefined>;
+  getUserProfile(userId: string): Promise<UserProfile | undefined>;
+  createUserProfile(profile: InsertUserProfile): Promise<UserProfile>;
+  updateUserProfile(userId: string, data: Partial<InsertUserProfile>): Promise<UserProfile | undefined>;
+>>>>>>> c60e1d3 (Update app files; ignore .env)
 
   // User Profile methods
   getUserProfile(userId: string): Promise<UserProfile | undefined>;
@@ -105,6 +115,7 @@ export class DatabaseStorage implements IStorage {
         return (currentXp + newXp) <= DAILY_XP_CAP;
     }
 
+<<<<<<< HEAD
     async logBehavioralSavings(userId: string, behaviorType: string, estimatedAmount: number): Promise<{ xpEarned: number, logId: string }> {
         
         // Use the checkSavingsVelocity helper to prevent abuse
@@ -137,6 +148,30 @@ export class DatabaseStorage implements IStorage {
             logId: newLog.id 
         };
     }
+=======
+  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.googleId, googleId));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(schema.users).values(insertUser).returning();
+    return user;
+  }
+
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db
+      .update(schema.users)
+    const [profile] = await db
+      .select()
+      .from(schema.userProfiles)
+      .where(eq(schema.userProfiles.userId, userId));
+    return profile;
+  }
+>>>>>>> c60e1d3 (Update app files; ignore .env)
 
   // NEW: Fetch history for the Chart and Rewards Page
   async getBehavioralSavings(userId: string): Promise<BehavioralSaving[]> {
