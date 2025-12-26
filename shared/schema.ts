@@ -15,6 +15,7 @@ export const users = pgTable("users", {
   lastName: text("last_name"),
   email: text("email"),
   phone: text("phone"),
+  googleId: text("google_id").unique(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
