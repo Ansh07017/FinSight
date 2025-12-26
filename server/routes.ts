@@ -688,11 +688,11 @@ const needsOnboarding = async (userId: string): Promise<boolean> => {
 export async function registerRoutes(
   httpServer: Server,
   app: Express
-): Promise<Server> {
+): Promise<Express> {
   const pool = new Pool({
     connectionString: process.env.PG_CONNECTION_STRING,
   });
-
+  app.set("trust proxy", 1);
   app.use(
     session({
       store: new pgStore({ pool }),
@@ -703,7 +703,7 @@ export async function registerRoutes(
       cookie: { 
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         secure: process.env.NODE_ENV === "production",
-        sameSite: "lax"
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
       },
     })
   );
@@ -947,5 +947,5 @@ export async function registerRoutes(
     res.json(h);
   });
 
-  return httpServer;
+  return app;
 }

@@ -8,15 +8,11 @@ import { createServer } from "http";
 
 const app = express();
 
-/**
- * FIX 1: Trust Proxy
- * This is crucial for session persistence. It tells Express to trust the 
- * headers set by the development proxy (Vite) so that the session cookie 
- * is correctly saved in your browser.
- */
 app.set("trust proxy", 1);
 
 const httpServer = createServer(app);
+
+export default app;
 
 declare module "http" {
   interface IncomingMessage {
@@ -72,7 +68,8 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Routes are registered here
+  // Routes are registered here. 
+  // NOTE: Ensure registerRoutes in routes.ts returns the app or server instance correctly.
   await registerRoutes(httpServer, app);
 
   // Global Error Handler
@@ -89,10 +86,14 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  const port = parseInt(process.env.PORT || "3000", 10);
-  const host = process.env.HOST || "127.0.0.1"; // Changed to 0.0.0.0 for better accessibility
+  // ONLY start the local listener if we are NOT on Vercel/Production.
+  // This allows the app to work locally while Vercel handles requests serverlessly.
+  if (process.env.NODE_ENV !== "production") {
+    const port = parseInt(process.env.PORT || "3000", 10);
+    const host = process.env.HOST || "127.0.0.1";
 
-  httpServer.listen(port, host, () => {
-    log(`serving at http://${host}:${port}`);
-  });
+    httpServer.listen(port, host, () => {
+      log(`serving at http://${host}:${port}`);
+    });
+  }
 })();

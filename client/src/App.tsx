@@ -116,7 +116,6 @@ function AppRouter() {
         <Layout><SettingsPage /></Layout>
       </Route>
 
-      {/* 3. FALLBACK */}
       <Route component={NotFound} />
     </Switch>
   );
