@@ -2,34 +2,15 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
 
-// server deps to bundle to reduce openat(2) syscalls
-// which helps cold start times
 const allowlist = [
-  "@google/generative-ai",
-  "axios",
   "connect-pg-simple",
   "cors",
-  "date-fns",
-  "drizzle-orm",
-  "drizzle-zod",
   "express",
-  "express-rate-limit",
   "express-session",
-  "jsonwebtoken",
-  "memorystore",
-  "multer",
-  "nanoid",
-  "nodemailer",
-  "openai",
   "passport",
   "passport-local",
   "pg",
-  "stripe",
-  "uuid",
-  "ws",
-  "xlsx",
   "zod",
-  "zod-validation-error",
 ];
 
 async function buildAll() {
@@ -44,7 +25,16 @@ async function buildAll() {
     ...Object.keys(pkg.dependencies || {}),
     ...Object.keys(pkg.devDependencies || {}),
   ];
-  const externals = allDeps.filter((dep) => !allowlist.includes(dep));
+
+  // UPDATED: Added specific Vercel-compatible native binaries to externals
+  const externals = [
+    ...allDeps.filter((dep) => !allowlist.includes(dep)),
+    "lightningcss",                     // Fixes "Could not resolve '../pkg'"
+    "@tailwindcss/oxide",               // Fixes ".node" loader error
+    "@tailwindcss/oxide-linux-x64-gnu", // Prevents bundling Linux-specific binaries
+    "tailwindcss",                      // Avoids bundling massive v4 engine
+    "bcryptjs"                          // Standard practice for native modules
+  ];
 
   await esbuild({
     entryPoints: ["server/index.ts"],
@@ -52,12 +42,12 @@ async function buildAll() {
     bundle: true,
     format: "cjs",
     outfile: "dist/index.cjs",
-    define: {
-      "process.env.NODE_ENV": '"production"',
-    },
     minify: true,
-    external: externals,
+    external: externals,                // Keeps these in node_modules at runtime
     logLevel: "info",
+    define: {
+      "process.env.NODE_ENV": '"production"', // Ensures production optimization
+    },
   });
 }
 
