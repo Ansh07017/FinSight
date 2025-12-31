@@ -13,7 +13,26 @@ import { insertUserSchema, insertUserProfileSchema, insertTransactionSchema, ins
 
 const pgStore = ConnectPg(session);
 
-// Setup Passport Local Strategy
+// Setup Passport Local Strategy (RESTORED TO FIX "UNKNOWN STRATEGY" ERROR)
+passport.use(
+  new LocalStrategy(async (username, password, done) => {
+    try {
+      const user = await storage.getUserByUsername(username);
+      if (!user || !user.password) {
+        return done(null, false, { message: "Invalid username or password" });
+      }
+      const isMatch = await bcrypt.compare(password, user.password as string);
+      if (!isMatch) {
+        return done(null, false, { message: "Invalid username or password" });
+      }
+      return done(null, user);
+    } catch (err) {
+      return done(err);
+    }
+  })
+);
+
+// Setup Passport Google Strategy
 passport.use(
   new GoogleStrategy(
     {
