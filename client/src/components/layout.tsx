@@ -135,7 +135,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 border-b border-border bg-card/80 backdrop-blur-md z-50 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <img src={logoImg} alt="FinSaver" className="w-6 h-6" />
-          <span className="font-bold text-white tracking-tighter">FinInsight</span>
+          <span className="font-bold text-white tracking-tighter">Finsight</span>
         </div>
         <Sheet>
           <SheetTrigger asChild>

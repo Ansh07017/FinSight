@@ -45,7 +45,7 @@ export default function OnboardingPage() {
         
         toast({
           title: "Profile Created!",
-          description: "Welcome to FinInsight. Let's start tracking your finances.",
+          description: "Welcome to Finsight. Let's start tracking your finances.",
         });
         
         // Step 3: Redirect to Dashboard
