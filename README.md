@@ -1,5 +1,6 @@
 Finsight 🚀
 Finsight is an intelligent financial companion designed to break the mold of monolithic expense tracking. It offers parallel analytics, real-time behavioral insights, and a reward-based system (B-SAVE) to encourage smarter saving habits.
+Dynamic Link: https://finsight-miov7kyyy-ansh-pratap-singhs-projects-dabd6445.vercel.app/
 
 ✨ Features
 Behavioral Savings (B-SAVE): Log smart financial choices (e.g., choosing home-cooked meals over takeout) to earn XP and level up your financial tier.
@@ -83,3 +84,4 @@ BehavioralSavings: XP logs for the B-SAVE engine.
 
 📝 License
 This project is licensed under the MIT License.
+
