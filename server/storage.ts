@@ -19,8 +19,8 @@ import type {
   BehavioralSaving,
 } from "../shared/schema.ts";
 
-const DAILY_XP_CAP = 500; // Max XP a user can earn from B-SAVE per day
-const XP_RATE_PER_RUPEE = 1; // 1 XP per rupee saved
+const DAILY_XP_CAP = 500; 
+const XP_RATE_PER_RUPEE = 1;
 
 const getDayBounds = () => {
     const start = new Date();
@@ -40,6 +40,7 @@ export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByGoogleId(googleId: string): Promise<User | undefined>; // ADDED FOR OAUTH
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<void>;
@@ -68,24 +69,41 @@ export interface IStorage {
   createUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
   updateUserSettings(userId: string, data: Partial<InsertUserSettings> & { currency?: string }): Promise<UserSettings | undefined>;
 
-  // NEW: Modular Analytics Methods
+  // Analytics & Reports
   getDashboardStats(userId: string): Promise<{ income: number; expense: number; savings: number }>;
   getWeeklySpendTrend(userId: string): Promise<Array<{ name: string, amount: number }>>;
   getCategoryBreakdown(userId: string): Promise<Array<{ name: string, value: number, color: string }>>;
-
-  // Reports Engine
   getFinancialHistory(userId: string): Promise<any>;
-
-  // Kept for backward compatibility
   getDashboardData(userId: string, startDate: Date, endDate: Date): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
   // --- User & Auth ---
-  async getUser(id: string) { const [u] = await db.select().from(schema.users).where(eq(schema.users.id, id)); return u; }
-  async getUserByUsername(username: string) { const [u] = await db.select().from(schema.users).where(eq(schema.users.username, username)); return u; }
-  async createUser(insertUser: InsertUser) { const [u] = await db.insert(schema.users).values(insertUser).returning(); return u; }
-  async updateUser(id: string, data: Partial<InsertUser>) { const [u] = await db.update(schema.users).set(data).where(eq(schema.users.id, id)).returning(); return u; }
+  async getUser(id: string) { 
+    const [u] = await db.select().from(schema.users).where(eq(schema.users.id, id)); 
+    return u; 
+  }
+  
+  async getUserByUsername(username: string) { 
+    const [u] = await db.select().from(schema.users).where(eq(schema.users.username, username)); 
+    return u; 
+  }
+
+  // ADDED: Google ID Lookup
+  async getUserByGoogleId(googleId: string) {
+    const [u] = await db.select().from(schema.users).where(eq(schema.users.googleId, googleId));
+    return u;
+  }
+
+  async createUser(insertUser: InsertUser) { 
+    const [u] = await db.insert(schema.users).values(insertUser).returning(); 
+    return u; 
+  }
+
+  async updateUser(id: string, data: Partial<InsertUser>) { 
+    const [u] = await db.update(schema.users).set(data).where(eq(schema.users.id, id)).returning(); 
+    return u; 
+  }
   
   async deleteUser(id: string): Promise<void> {
     await db.transaction(async (tx) => {
@@ -103,7 +121,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select({ totalXp: sql<number>`sum(${schema.behavioralSavings.xpAwarded})` })
         .from(schema.behavioralSavings)
         .where(and(eq(schema.behavioralSavings.userId, userId), gte(schema.behavioralSavings.loggedAt, start), lt(schema.behavioralSavings.loggedAt, end)));
-    const currentXp = result[0]?.totalXp || 0;
+    const currentXp = Number(result[0]?.totalXp || 0);
     return (currentXp + (amount * XP_RATE_PER_RUPEE)) <= DAILY_XP_CAP;
   }
 
@@ -116,11 +134,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async logBehavioralSavings(userId: string, behaviorType: string, estimatedAmount: number) {
-    const canLog = await this.checkSavingsVelocity(userId, estimatedAmount);
-    if (!canLog) throw new Error("Daily limit reached. Cannot log more behavioral savings today.");
-    
     const xpEarned = Math.round(estimatedAmount * XP_RATE_PER_RUPEE);
-    const [newLog] = await db.insert(schema.behavioralSavings).values({ userId, behaviorType, estimatedAmount: estimatedAmount.toString(), xpAwarded: xpEarned }).returning();
+    const canLog = await this.checkSavingsVelocity(userId, estimatedAmount);
+    if (!canLog) throw new Error("Daily limit reached.");
+    
+    const [newLog] = await db.insert(schema.behavioralSavings).values({ 
+      userId, 
+      behaviorType, 
+      estimatedAmount: estimatedAmount.toString(), 
+      xpAwarded: xpEarned 
+    }).returning();
 
     await db.update(schema.userProfiles)
         .set({ rewardPoints: sql`${schema.userProfiles.rewardPoints} + ${xpEarned}` })
@@ -145,7 +168,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  // --- REFACTORED DASHBOARD METHODS ---
+  // --- Dashboard Methods ---
   async getDashboardStats(userId: string) {
     const txs = await db.select().from(schema.transactions).where(eq(schema.transactions.userId, userId));
     let income = 0; let expense = 0;
@@ -199,7 +222,7 @@ export class DatabaseStorage implements IStorage {
   async createUserSettings(s: InsertUserSettings) { const [st] = await db.insert(schema.userSettings).values(s).returning(); return st; }
   async updateUserSettings(userId: string, d: Partial<InsertUserSettings>) { const [s] = await db.update(schema.userSettings).set(d).where(eq(schema.userSettings.userId, userId)).returning(); return s; }
 
-  // --- Original Reports Engine (Preserved) ---
+  // --- Reports & Preserved Methods ---
   async getFinancialHistory(userId: string): Promise<any> {
     const txs = await db.select().from(schema.transactions).where(eq(schema.transactions.userId, userId)).orderBy(desc(schema.transactions.date));
     const monthlyMap = new Map();
@@ -216,18 +239,13 @@ export class DatabaseStorage implements IStorage {
       data.savings = data.income - data.expense;
     });
     const monthlyData = Array.from(monthlyMap.values()).reverse();
-    const totalIncome = monthlyData.reduce((sum, d) => sum + d.income, 0);
-    const totalExpense = monthlyData.reduce((sum, d) => sum + d.expense, 0);
     return {
       monthlyData,
-      avgIncome: monthlyData.length > 0 ? totalIncome / monthlyData.length : 0,
-      avgSavingsRate: totalIncome > 0 ? ((totalIncome - totalExpense) / totalIncome) * 100 : 0,
-      totalSavings: totalIncome - totalExpense,
-      avgIncomeChange: 0 
+      totalSavings: monthlyData.reduce((sum, d) => sum + d.savings, 0),
+      avgIncome: monthlyData.length > 0 ? monthlyData.reduce((sum, d) => sum + d.income, 0) / monthlyData.length : 0,
     };
   }
 
-  // --- Original Dashboard Data (Preserved) ---
   async getDashboardData(userId: string, startDate: Date, endDate: Date): Promise<any> {
     const transactionsList = await db.select().from(schema.transactions).where(and(eq(schema.transactions.userId, userId), gte(schema.transactions.date, startDate), lt(schema.transactions.date, endDate))).orderBy(desc(schema.transactions.date));
     let income = 0; let expense = 0;
@@ -246,7 +264,7 @@ export class DatabaseStorage implements IStorage {
     return {
         stats: { income, expense, savings: income - expense },
         weeklySpendTrend: dayNames.map((name, i) => ({ name, amount: weeklyMap.get(i) || 0 })),
-        expensesByCategory: Array.from(categoryMap.entries()).map(([name, value], i) => ({ name, value, color: ['#00D4AA', '#5B5BFD', '#FF66AA', '#FFBB00', '#CC66FF'][i % 5] })).sort((a, b) => b.value - a.value),
+        expensesByCategory: Array.from(categoryMap.entries()).map(([name, value], i) => ({ name, value, color: ['#00D4AA', '#5B5BFD', '#FF66AA', '#FFBB00', '#CC66FF'][i % 5] })),
         recentTransactions: transactionsList.slice(0, 10),
     };
   }

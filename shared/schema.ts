@@ -10,7 +10,8 @@ import { z } from "zod";
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  // UPDATED: Password is now nullable to support Google OAuth users
+  password: text("password"), 
   firstName: text("first_name"),
   lastName: text("last_name"),
   email: text("email"),
@@ -22,7 +23,7 @@ export const users = pgTable("users", {
 export const userProfiles = pgTable("user_profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  userType: text("user_type").notNull(), // 'salaried', 'student', etc.
+  userType: text("user_type").notNull(), 
   currentBalance: decimal("current_balance", { precision: 12, scale: 2 }).default("0"),
   totalSavings: decimal("total_savings", { precision: 12, scale: 2 }).default("0"),
   salaryAmount: decimal("salary_amount", { precision: 12, scale: 2 }),
@@ -68,7 +69,11 @@ export const userSettings = pgTable("user_settings", {
 // 2. Zod Schemas (Validation)
 // ==========================================
 
-export const insertUserSchema = createInsertSchema(users).omit({ 
+// UPDATED: insertUserSchema now correctly handles optional passwords
+export const insertUserSchema = createInsertSchema(users, {
+  password: z.string().min(8, "Password must be at least 8 characters").optional(),
+  email: z.string().email("Invalid email address").optional(),
+}).omit({ 
   id: true, 
   createdAt: true 
 });
@@ -89,10 +94,7 @@ export const insertTransactionSchema = createInsertSchema(transactions, {
       const num = parseFloat(val);
       return !isNaN(num) && num > 0;
     }, { message: "Amount must be a valid positive number." }),
-  date: z.coerce.date({
-    required_error: "Please select a date",
-    invalid_type_error: "That's not a valid date!",
-  }).default(() => new Date()), 
+  date: z.coerce.date().default(() => new Date()), 
 }).omit({ 
   id: true, 
   createdAt: true 
@@ -103,20 +105,16 @@ export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
 });
 
 // ==========================================
-// 3. Types (Typescript Interface)
+// 3. Types
 // ==========================================
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
-
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type InsertUserProfile = z.infer<typeof insertUserProfileSchema>;
-
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
-
 export type BehavioralSaving = typeof behavioralSavings.$inferSelect;
 export type InsertBehavioralSavings = z.infer<typeof insertBehavioralSavingsSchema>;
-
 export type UserSettings = typeof userSettings.$inferSelect;
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
