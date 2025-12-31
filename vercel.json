@@ -1,8 +1,7 @@
 {
- "vercel": {
-  "includeFiles": [
-    "node_modules/lightningcss/**",
-    "node_modules/@tailwindcss/oxide/**"
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.js" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
-}
 }
