@@ -1,8 +1,0 @@
-{
- "vercel": {
-  "includeFiles": [
-    "node_modules/lightningcss/**",
-    "node_modules/@tailwindcss/oxide/**"
-  ]
-}
-}
