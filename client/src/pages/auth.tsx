@@ -1,4 +1,3 @@
-
 // client/src/pages/auth.tsx
 
 import React, { useState } from 'react';
@@ -14,6 +13,7 @@ import { auth } from "@/lib/api";
 import authBg from "@assets/generated_images/dark_minimalist_abstract_geometric_financial_background.png";
 import logoImg from "@assets/generated_images/minimalist_mint_green_rupee_logo_symbol.png";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { FcGoogle } from "react-icons/fc"; // RESTORED IMPORT
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
@@ -34,15 +34,13 @@ export default function AuthPage() {
     
     setIsLoading(true);
     try {
-      // The refactored server returns: { user: { id, username, needsOnboarding } }
       const response = await auth.login(loginUsername, loginPassword);
       
-      // Safety Check: Ensure credentials aren't "lost" by verifying the user object
       if (response?.user) {
         if (response.user.needsOnboarding) {
           setLocation("/onboarding");
         } else {
-          setLocation("/"); // Success -> Dashboard
+          setLocation("/"); 
         }
       } else {
         throw new Error("Invalid server response format");
@@ -64,15 +62,13 @@ export default function AuthPage() {
 
     setIsLoading(true);
     try {
-      // Register logic now correctly triggers the auto-login on server
-      const response = await auth.register(registerUsername, registerPassword);
+      await auth.register(registerUsername, registerPassword);
       
       toast({
         title: "Account Created",
         description: "Welcome to FinSaver! Let's get started.",
       });
 
-      // New users always need onboarding
       setLocation("/onboarding");
     } catch (error: any) {
       toast({
@@ -84,6 +80,30 @@ export default function AuthPage() {
       setIsLoading(false);
     }
   };
+
+  // Reusable Google Button Component to keep code clean
+  const GoogleAuthButton = () => (
+    <>
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-border" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+        </div>
+      </div>
+
+      <Button 
+        variant="outline" 
+        type="button"
+        className="w-full border-border/50 bg-secondary/30 hover:bg-secondary/50 text-white" 
+        onClick={() => window.location.href = "/api/auth/google"}
+      >
+        <FcGoogle className="mr-2 h-5 w-5" />
+        Continue with Google
+      </Button>
+    </>
+  );
 
   return (
     <div className="min-h-screen w-full flex bg-background">
@@ -98,7 +118,7 @@ export default function AuthPage() {
               <img src={logoImg} alt="Logo" className="w-12 h-12" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-4">FinInsight</h1>
+          <h1 className="text-4xl font-bold text-white mb-4">Finsight</h1>
           <p className="text-muted-foreground text-lg leading-relaxed">
             Your intelligent financial companion. Break free from monolithic tracking. 
             Experience parallel analytics and real-time behavioral insights.
@@ -155,7 +175,7 @@ export default function AuthPage() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="absolute right-0 top-[29px] h-9 w-9 p-0 text-muted-foreground hover:bg-transparent"
+                      className="absolute right-0 top-7.25 h-9 w-9 p-0 text-muted-foreground hover:bg-transparent"
                       onClick={() => setShowPassword(!showPassword)}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -166,6 +186,7 @@ export default function AuthPage() {
                     {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</> : "Sign In"}
                   </Button>
                 </form>
+                <GoogleAuthButton /> {/* RESTORED FOR LOGIN */}
               </TabsContent>
               
               <TabsContent value="register">
@@ -198,7 +219,7 @@ export default function AuthPage() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="absolute right-0 top-[29px] h-9 w-9 p-0 text-muted-foreground hover:bg-transparent"
+                      className="absolute right-0 top-7.25 h-9 w-9 p-0 text-muted-foreground hover:bg-transparent"
                       onClick={() => setShowPassword(!showPassword)}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -209,6 +230,7 @@ export default function AuthPage() {
                     {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Initializing...</> : "Create Account"}
                   </Button>
                 </form>
+                <GoogleAuthButton /> {/* RESTORED FOR REGISTER */}
               </TabsContent>
             </Tabs>
           </CardContent>

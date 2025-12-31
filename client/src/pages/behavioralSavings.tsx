@@ -144,7 +144,7 @@ export default function BehavioralSavingsPage() {
                 <div className="flex items-center gap-2 bg-secondary/20 p-1 rounded-lg border border-border/50">
                     <Calendar className="w-4 h-4 text-muted-foreground ml-2" />
                     <Select value={timeRange} onValueChange={setTimeRange}>
-                        <SelectTrigger className="w-[140px] border-none bg-transparent focus:ring-0 text-xs">
+                        <SelectTrigger className="w-35 border-none bg-transparent focus:ring-0 text-xs">
                             <SelectValue placeholder="Select Range" />
                         </SelectTrigger>
                         <SelectContent className="bg-card border-border">
@@ -156,7 +156,7 @@ export default function BehavioralSavingsPage() {
                 </div>
             </div>
 
-            <Card className="bg-card border-border/50 shadow-xl overflow-hidden min-h-[500px]">
+            <Card className="bg-card border-border/50 shadow-xl overflow-hidden min-h-125">
                 <div className="grid grid-cols-1 lg:grid-cols-2 h-full">
                     
                     <div className="p-6 border-b lg:border-b-0 lg:border-r border-border/50 space-y-6">
@@ -251,7 +251,7 @@ export default function BehavioralSavingsPage() {
                             )}
                         </div>
 
-                        <div className="h-[280px] w-full flex flex-col space-y-2">
+                        <div className="h-70-full flex flex-col space-y-2">
                             <Label className="text-muted-foreground flex items-center gap-1 uppercase tracking-wider text-[10px]">
                                 <TrendingUp className="w-3 h-3" /> Savings Trend (Last {timeRange} Days)
                             </Label>

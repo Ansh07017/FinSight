@@ -40,6 +40,7 @@ passport.use(
             firstName,
             lastName,
           });
+          await storage.createUserSettings({ userId: user.id });
         }
         return done(null, user);
       } catch (err) {
@@ -114,7 +115,8 @@ export async function registerRoutes(
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) return res.status(400).json({ message: "Username already exists" });
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+      // FIX: Cast password to string for bcrypt
+      const hashedPassword = await bcrypt.hash(password as string, 10);
       const user = await storage.createUser({ username, password: hashedPassword });
       await storage.createUserSettings({ userId: user.id });
 
@@ -152,41 +154,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/auth/me", requireAuth, (req, res) => {
-    const user = req.user as any; // Type cast to resolve TS error
+    const user = req.user as any;
     res.json({ user: { id: user.id, username: user.username } });
   });
-
-  // Google OAuth Routes
-  passport.use(
-    new GoogleStrategy(
-      {
-        clientID: process.env.GOOGLE_CLIENT_ID || "",
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-        callbackURL: "/api/auth/google/callback",
-      },
-      async (accessToken, refreshToken, profile, done) => {
-        try {
-          let user = await storage.getUserByUsername(profile.id);
-          if (!user) {
-            const googleEmail = profile.emails?.[0]?.value || `google-${profile.id}@finsaver.local`;
-            const firstName = profile.name?.givenName || "";
-            const lastName = profile.name?.familyName || "";
-            user = await storage.createUser({
-              username: profile.id,
-              password: `google_${profile.id}`,
-              email: googleEmail,
-              firstName,
-              lastName,
-            });
-            await storage.createUserSettings({ userId: user.id });
-          }
-          return done(null, user);
-        } catch (error) {
-          return done(error);
-        }
-      }
-    )
-  );
 
   app.get(
     "/api/auth/google",
@@ -203,7 +173,6 @@ export async function registerRoutes(
     }
   );
 
-  // ADDED: Missing Delete Account Route to fix "Deletion Failed"
   app.delete("/api/auth/account", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
@@ -212,10 +181,15 @@ export async function registerRoutes(
       const userData = await storage.getUser(user.id);
       if (!userData) return res.status(404).json({ message: "User not found" });
 
-      const isValid = await bcrypt.compare(password, userData.password);
+      // FIX: Guard clause for null passwords and casting for bcrypt
+      if (!userData.password) {
+        return res.status(400).json({ message: "Social login accounts cannot be deleted with a password check." });
+      }
+
+      const isValid = await bcrypt.compare(password, userData.password as string);
       if (!isValid) return res.status(400).json({ message: "Invalid password to confirm deletion" });
 
-      await storage.deleteUser(user.id); // Ensure deleteUser is implemented in storage.ts
+      await storage.deleteUser(user.id); 
       
       req.logout((err) => {
         if (err) return res.status(500).json({ message: "Error during logout" });
@@ -233,7 +207,12 @@ export async function registerRoutes(
       const userData = await storage.getUser(user.id);
       if (!userData) return res.status(404).json({ message: "User not found" });
 
-      const isValid = await bcrypt.compare(currentPassword, userData.password);
+      // FIX: Guard clause for null passwords and casting for bcrypt
+      if (!userData.password) {
+        return res.status(400).json({ message: "Social accounts do not have a password to update." });
+      }
+
+      const isValid = await bcrypt.compare(currentPassword, userData.password as string);
       if (!isValid) return res.status(400).json({ message: "Invalid current password" });
 
       const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -244,16 +223,14 @@ export async function registerRoutes(
     }
   });
 
-  // ========== Profile Routes (Modularized) ==========
+  // ========== Profile Routes ==========
   
-  // High-speed Sidebar Summary
   app.get("/api/profile/summary", requireAuth, async (req, res) => {
     const user = req.user as any;
     const summary = await storage.getProfileSummary(user.id);
     res.json(summary);
   });
 
-  // Granular Financial Data
   app.get("/api/profile/financial", requireAuth, async (req, res) => {
     const user = req.user as any;
     const profile = await storage.getUserProfile(user.id);
@@ -263,7 +240,6 @@ export async function registerRoutes(
     });
   });
 
-  // ADDED: Route for Settings Page profile updates
   app.patch("/api/profile/user", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
@@ -301,7 +277,7 @@ export async function registerRoutes(
     }
   });
 
-  // ========== Transaction Routes (Modularized) ==========
+  // ========== Transaction Routes ==========
   
   app.get("/api/transactions/recent", requireAuth, async (req, res) => {
     const user = req.user as any;
@@ -325,7 +301,7 @@ export async function registerRoutes(
     }
   });
 
-  // ========== Dashboard Routes (Speed Optimized) ==========
+  // ========== Dashboard Routes ==========
   
   app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
     const user = req.user as any;
@@ -345,7 +321,7 @@ export async function registerRoutes(
     res.json(categories);
   });
 
-  // ========== Behavioral Savings (Modularized) ==========
+  // ========== Behavioral Savings ==========
 
   app.get("/api/behavioral/summary", requireAuth, async (req, res) => {
     const user = req.user as any;
