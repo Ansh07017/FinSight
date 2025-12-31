@@ -216,7 +216,21 @@ export class DatabaseStorage implements IStorage {
   async updateUserProfile(userId: string, d: Partial<InsertUserProfile>) { const [p] = await db.update(schema.userProfiles).set(d as any).where(eq(schema.userProfiles.userId, userId)).returning(); return p; }
   async getTransactions(userId: string) { return db.select().from(schema.transactions).where(eq(schema.transactions.userId, userId)).orderBy(desc(schema.transactions.date)); }
   async getTransaction(id: string) { const [t] = await db.select().from(schema.transactions).where(eq(schema.transactions.id, id)); return t; }
-  async createTransaction(t: InsertTransaction & { userId: string }) { const [tx] = await db.insert(schema.transactions).values(t as any).returning(); return tx; }
+  
+  // PATCHED: Map values specifically to avoid toISOString error
+  async createTransaction(t: InsertTransaction & { userId: string }) { 
+    const [tx] = await db.insert(schema.transactions).values({
+      userId: t.userId,
+      type: t.type,
+      title: t.title,
+      amount: t.amount,
+      category: t.category,
+      paymentMode: t.paymentMode,
+      date: t.date || new Date(),
+    }as any).returning(); 
+    return tx; 
+  }
+
   async deleteTransaction(id: string) { const r = await db.delete(schema.transactions).where(eq(schema.transactions.id, id)); return (r.rowCount ?? 0) > 0; }
   async getUserSettings(userId: string) { const [s] = await db.select().from(schema.userSettings).where(eq(schema.userSettings.userId, userId)); return s; }
   async createUserSettings(s: InsertUserSettings) { const [st] = await db.insert(schema.userSettings).values(s).returning(); return st; }

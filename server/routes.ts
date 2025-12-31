@@ -13,7 +13,7 @@ import { insertUserSchema, insertUserProfileSchema, insertTransactionSchema, ins
 
 const pgStore = ConnectPg(session);
 
-// Setup Passport Local Strategy (RESTORED TO FIX "UNKNOWN STRATEGY" ERROR)
+// Setup Passport Local Strategy (PATCHED BACK IN)
 passport.use(
   new LocalStrategy(async (username, password, done) => {
     try {
@@ -310,15 +310,21 @@ export async function registerRoutes(
     res.json(transactions);
   });
 
-  app.post("/api/transactions", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as any;
-      const transaction = await storage.createTransaction({ ...req.body, userId: user.id });
-      res.json(transaction);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
+app.post("/api/transactions", requireAuth, async (req, res) => {
+  try {
+    const user = req.user as any;
+    const dataToValidate = { 
+      ...req.body, 
+      userId: user.id 
+    };
+    const validatedData = insertTransactionSchema.parse(dataToValidate);
+    const transaction = await storage.createTransaction(validatedData);
+    
+    res.json(transaction);
+  } catch (error: any) {
+    res.status(400).json({ message: error.message });
+  }
+});
 
   // ========== Dashboard Routes ==========
   
