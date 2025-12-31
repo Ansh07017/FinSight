@@ -24,8 +24,8 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname, "client"),
   build: {
-    // Ensures frontend assets land in dist/public for the backend server to find
-    outDir: path.resolve(import.meta.dirname, "../dist/public"), 
+    // This tells Vite: "Go to the project root, then into dist/public"
+    outDir: path.resolve(import.meta.dirname, "dist", "public"),
     emptyOutDir: true,
   },
   server: {
