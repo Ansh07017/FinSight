@@ -4,7 +4,7 @@ dotenv.config();
 import { drizzle } from "drizzle-orm/node-postgres";
 import pkg from "pg";
 const { Pool } = pkg;
-import { eq, and, desc, sql, gte, lt } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lt,gt } from "drizzle-orm";
 import * as schema from "../shared/schema.ts";
 
 import type {
@@ -88,7 +88,7 @@ export class DatabaseStorage implements IStorage {
     const [u] = await db.select().from(schema.users).where(eq(schema.users.username, username)); 
     return u; 
   }
-
+  
   // ADDED: Google ID Lookup
   async getUserByGoogleId(googleId: string) {
     const [u] = await db.select().from(schema.users).where(eq(schema.users.googleId, googleId));
@@ -209,26 +209,60 @@ export class DatabaseStorage implements IStorage {
   async getRecentTransactions(userId: string, limit: number) {
     return await db.select().from(schema.transactions).where(eq(schema.transactions.userId, userId)).orderBy(desc(schema.transactions.date)).limit(limit);
   }
+  
 
   // --- Core CRUD ---
-  async getUserProfile(userId: string) { const [p] = await db.select().from(schema.userProfiles).where(eq(schema.userProfiles.userId, userId)); return p; }
-  async createUserProfile(p: InsertUserProfile) { const [prof] = await db.insert(schema.userProfiles).values(p as any).returning(); return prof; }
-  async updateUserProfile(userId: string, d: Partial<InsertUserProfile>) { const [p] = await db.update(schema.userProfiles).set(d as any).where(eq(schema.userProfiles.userId, userId)).returning(); return p; }
-  async getTransactions(userId: string) { return db.select().from(schema.transactions).where(eq(schema.transactions.userId, userId)).orderBy(desc(schema.transactions.date)); }
-  async getTransaction(id: string) { const [t] = await db.select().from(schema.transactions).where(eq(schema.transactions.id, id)); return t; }
-  
-  // PATCHED: Map values specifically to avoid toISOString error
-  async createTransaction(t: InsertTransaction & { userId: string }) { 
-    const [tx] = await db.insert(schema.transactions).values({
-      userId: t.userId,
-      type: t.type,
-      title: t.title,
-      amount: t.amount,
-      category: t.category,
-      paymentMode: t.paymentMode,
-      date: t.date || new Date(),
-    }as any).returning(); 
-    return tx; 
+async getUserProfile(userId: string) { 
+  const [p] = await db.select().from(schema.userProfiles).where(eq(schema.userProfiles.userId, userId)); 
+  return p; 
+}
+
+async createUserProfile(p: InsertUserProfile) { 
+  // Standardize decimal fields as strings for PostgreSQL compatibility
+  const [prof] = await db.insert(schema.userProfiles).values(p as any).returning(); 
+  return prof; 
+}
+
+async updateUserProfile(userId: string, d: Partial<InsertUserProfile>) { 
+  const [p] = await db.update(schema.userProfiles).set(d as any).where(eq(schema.userProfiles.userId, userId)).returning(); 
+  return p; 
+}
+
+async getTransactions(userId: string) { 
+  return db.select().from(schema.transactions).where(eq(schema.transactions.userId, userId)).orderBy(desc(schema.transactions.date)); 
+}
+
+async getTransaction(id: string) { 
+  const [t] = await db.select().from(schema.transactions).where(eq(schema.transactions.id, id)); 
+  return t; 
+}
+
+async createTransaction(t: InsertTransaction & { userId: string }) {
+    return await db.transaction(async (tx) => {
+      // 1. Insert the transaction
+      const [newTx] = await tx.insert(schema.transactions).values({
+        userId: t.userId,
+        type: t.type,
+        title: t.title,
+        amount: t.amount,
+        category: t.category,
+        paymentMode: t.paymentMode,
+        date: t.date || new Date(),
+      } as any).returning();
+
+      // 2. Calculate balance adjustment: Income adds, Expense subtracts
+      const amount = parseFloat(t.amount);
+      const adjustment = t.type === 'income' ? amount : -amount;
+
+      // 3. Update the user_profiles table currentBalance
+      await tx.update(schema.userProfiles)
+        .set({
+          currentBalance: sql`${schema.userProfiles.currentBalance} + ${adjustment}`
+        })
+        .where(eq(schema.userProfiles.userId, t.userId));
+
+      return newTx;
+    });
   }
 
   async deleteTransaction(id: string) { const r = await db.delete(schema.transactions).where(eq(schema.transactions.id, id)); return (r.rowCount ?? 0) > 0; }
@@ -282,6 +316,83 @@ export class DatabaseStorage implements IStorage {
         recentTransactions: transactionsList.slice(0, 10),
     };
   }
+
+async getLeaderboard() {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // Aggregate monthly income & expense per user
+  const monthlyAgg = db
+    .select({
+      userId: schema.transactions.userId,
+
+      income: sql<number>`
+        SUM(
+          CASE 
+            WHEN ${schema.transactions.type} = 'income'
+            THEN CAST(${schema.transactions.amount} AS DECIMAL)
+            ELSE 0 
+          END
+        )
+      `.as("income"),
+
+      expense: sql<number>`
+        SUM(
+          CASE 
+            WHEN ${schema.transactions.type} = 'expense'
+            THEN CAST(${schema.transactions.amount} AS DECIMAL)
+            ELSE 0 
+          END
+        )
+      `.as("expense"),
+    })
+    .from(schema.transactions)
+    .where(gte(schema.transactions.date, startOfMonth))
+    .groupBy(schema.transactions.userId)
+    .as("monthlyAgg");
+
+  const result = await db
+    .select({
+      userId: schema.users.id,
+      username: schema.users.username,
+      firstName: schema.users.firstName,
+      lastName: schema.users.lastName,
+
+      savingsRate: sql<number>`
+        CASE
+          WHEN COALESCE(${monthlyAgg.income}, 0) > 0
+          THEN (
+            (COALESCE(${monthlyAgg.income}, 0) - COALESCE(${monthlyAgg.expense}, 0))
+            / ${monthlyAgg.income}
+          ) * 100
+          ELSE 0
+        END
+      `,
+    })
+    .from(schema.users)
+    .leftJoin(monthlyAgg, eq(schema.users.id, monthlyAgg.userId))
+    .orderBy(
+      desc(sql`
+        CASE
+          WHEN COALESCE(${monthlyAgg.income}, 0) > 0
+          THEN (
+            (COALESCE(${monthlyAgg.income}, 0) - COALESCE(${monthlyAgg.expense}, 0))
+            / ${monthlyAgg.income}
+          ) * 100
+          ELSE 0
+        END
+      `)
+    )
+    .limit(50);
+
+  return result.map(user => ({
+    userId: user.userId,
+    displayName: user.firstName
+      ? `${user.firstName} ${user.lastName ?? ""}`.trim()
+      : user.username,
+    savingsPercentage: Math.round(Number(user.savingsRate ?? 0)),
+  }));
+}
 }
 
 export const storage = new DatabaseStorage();

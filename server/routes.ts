@@ -389,6 +389,15 @@ app.post("/api/transactions", requireAuth, async (req, res) => {
     const h = await storage.getFinancialHistory(user.id);
     res.json(h);
   });
+  // Add this to your registerRoutes function in server/routes.ts
+app.get("/api/leaderboard", requireAuth, async (req, res) => {
+  try {
+    const board = await storage.getLeaderboard();
+    res.json(board);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
   return app;
 }

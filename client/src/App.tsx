@@ -14,6 +14,7 @@ import RewardsPage from "@/pages/rewards";
 import SettingsPage from "@/pages/settings";
 import ReportsPage from "@/pages/reports";
 import OnboardingPage from "@/pages/onboarding";
+import LeaderBoardPage from "@/pages/leaderboard";
 import { AuthProvider } from "@/components/AuthContext"; 
 import Layout from "@/components/layout"; 
 
@@ -39,6 +40,9 @@ function AppRouter() {
       </Route>
       <Route path="/reports">
         <Layout><ReportsPage /></Layout>
+      </Route>
+      <Route path="/leaderboard">
+        <Layout><LeaderBoardPage /></Layout>
       </Route>
       <Route path="/settings">
         <Layout><SettingsPage /></Layout>

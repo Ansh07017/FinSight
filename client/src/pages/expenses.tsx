@@ -76,6 +76,12 @@ export default function ExpensesPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-trend"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profile/financial"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions-recent"] }); // Dashboard list
+      queryClient.invalidateQueries({ queryKey: ["profile-full"] }); // Dashboard Balance & Tier
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+
+      
       toast({ title: "Transaction added", description: "Successfully recorded." });
       setIsDialogOpen(false);
       resetForm();
@@ -138,7 +144,7 @@ export default function ExpensesPage() {
               <Plus className="w-5 h-5 mr-2" /> Add Transaction
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-card border-border text-white sm:max-w-[425px]">
+          <DialogContent className="bg-card border-border text-white sm:max-w-106.25">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold">New Entry</DialogTitle>
               <DialogDescription>Input your financial activity below.</DialogDescription>
@@ -231,7 +237,7 @@ export default function ExpensesPage() {
               <Input placeholder="Search records..." className="pl-9 bg-secondary/50 border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
             <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-full md:w-[220px] bg-secondary/50 border-border">
+              <SelectTrigger className="w-full md:w-55 bg-secondary/50 border-border">
                 <Filter className="w-4 h-4 mr-2" />
                 <SelectValue placeholder="Category Filter" />
               </SelectTrigger>

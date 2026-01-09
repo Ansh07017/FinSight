@@ -12,6 +12,7 @@ import {
   Settings, 
   Menu, 
   LogOut,
+  ListOrdered,
   FileBarChart,
   Loader2 
 } from "lucide-react";
@@ -27,6 +28,8 @@ const navItems = [
   { icon: Trophy, label: "Rewards", href: "/rewards" },
   { icon: FileBarChart, label: "Reports", href: "/reports" },
   { icon: Settings, label: "Settings", href: "/settings" },
+  { icon: ListOrdered, label: "Leaderboard", href: "/leaderboard" },
+
 ];
 
 /**

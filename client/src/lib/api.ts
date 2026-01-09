@@ -143,7 +143,9 @@ export const behavioral = {
             method: "GET" 
         }),
 };
-
+export const leaderboard = {
+  get: () => apiRequest("/api/leaderboard"),
+};
 // ========== Settings APIs ==========
 export const settings = {
   get: () => apiRequest("/api/settings"),

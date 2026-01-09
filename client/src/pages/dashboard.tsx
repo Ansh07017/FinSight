@@ -183,7 +183,7 @@ export default function Dashboard() {
                         <CardDescription>Expenses over the last 4 weeks</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[300px] w-full">
+                        <div className="h-75 w-full">
                             {trendLoading ? (
                                 <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin" /></div>
                             ) : weeklySpendTrend && weeklySpendTrend.length > 0 ? (
@@ -222,7 +222,7 @@ export default function Dashboard() {
                         <CardDescription>Where your money goes</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[300px] w-full">
+                        <div className="h-75 w-full">
                             {catLoading ? (
                                 <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin" /></div>
                             ) : expensesByCategory && expensesByCategory.length > 0 ? (

@@ -136,6 +136,10 @@ export default function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile-full"] });
       queryClient.invalidateQueries({ queryKey: ["profile-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profile/financial"] });
+      queryClient.invalidateQueries({ queryKey: ["auth-me"] });
+
       toast({ title: "Profile Updated", description: "Personal details saved successfully." });
     },
     onError: (error: Error) => {
