@@ -10,7 +10,7 @@ interface UserProfileData {
   firstName: string;
   lastName: string;
   tier: string;
-  username: string;
+  email: string;
 }
 
 // 2. Define the Context Type
@@ -43,10 +43,10 @@ export const AuthProvider = ({ children }: AuthContextProps) => {
       const data = await profile.getSummary();
       
       setUserProfile({
-        firstName: data.firstName || data.username,
+        firstName: data.firstName || data.email,
         lastName: data.lastName || "",
         tier: data.tier || "Bronze Tier Member",
-        username: data.username
+        email: data.email
       });
       setIsAuthenticated(true);
     } catch (error: any) {

@@ -39,7 +39,7 @@ const db = drizzle(pool, { schema });
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByemail(email: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | undefined>; // ADDED FOR OAUTH
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
@@ -53,7 +53,7 @@ export interface IStorage {
 
   // User Profile methods
   getUserProfile(userId: string): Promise<UserProfile | undefined>;
-  getProfileSummary(userId: string): Promise<{ firstName: string | null; lastName: string | null; username: string; tier: string | null }>;
+  getProfileSummary(userId: string): Promise<{ firstName: string | null; lastName: string | null; email: string; tier: string | null }>;
   createUserProfile(profile: InsertUserProfile): Promise<UserProfile>;
   updateUserProfile(userId: string, data: Partial<InsertUserProfile>): Promise<UserProfile | undefined>;
     
@@ -75,6 +75,12 @@ export interface IStorage {
   getCategoryBreakdown(userId: string): Promise<Array<{ name: string, value: number, color: string }>>;
   getFinancialHistory(userId: string): Promise<any>;
   getDashboardData(userId: string, startDate: Date, endDate: Date): Promise<any>;
+
+  setResetToken(userId: string, token: string, expires: Date): Promise<void>;
+  getUserByResetToken(token: string): Promise<User | undefined>;
+  // Add these for OTP Verification
+  generateOTP(userId: string): Promise<string>;
+  verifyUser(userId: string, code: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -84,8 +90,8 @@ export class DatabaseStorage implements IStorage {
     return u; 
   }
   
-  async getUserByUsername(username: string) { 
-    const [u] = await db.select().from(schema.users).where(eq(schema.users.username, username)); 
+  async getUserByemail(email: string) { 
+    const [u] = await db.select().from(schema.users).where(eq(schema.users.email, email)); 
     return u; 
   }
   
@@ -104,7 +110,75 @@ export class DatabaseStorage implements IStorage {
     const [u] = await db.update(schema.users).set(data).where(eq(schema.users.id, id)).returning(); 
     return u; 
   }
-  
+  // Add these inside the DatabaseStorage class
+async setResetToken(userId: string, token: string, expires: Date): Promise<void> {
+  await db.update(schema.users)
+    .set({ resetToken: token, resetTokenExpires: expires })
+    .where(eq(schema.users.id, userId));
+}
+
+async getUserByResetToken(token: string): Promise<User | undefined> {
+  const [user] = await db.select()
+    .from(schema.users)
+    .where(and(
+      eq(schema.users.resetToken, token),
+      gt(schema.users.resetTokenExpires, new Date())
+    ));
+  return user;
+}
+async deleteTransaction(id: string): Promise<boolean> {
+  return await db.transaction(async (tx) => {
+    // 1. Get the transaction details before deleting it
+    const [transaction] = await tx.select()
+      .from(schema.transactions)
+      .where(eq(schema.transactions.id, id));
+
+    if (!transaction) return false;
+
+    // 2. Calculate the reversal: 
+    // If we delete an INCOME, balance goes DOWN. 
+    // If we delete an EXPENSE, balance goes UP.
+    const amount = parseFloat(transaction.amount);
+    const adjustment = transaction.type === 'income' ? -amount : amount;
+
+    // 3. Update the user's balance
+    await tx.update(schema.userProfiles)
+      .set({
+        currentBalance: sql`${schema.userProfiles.currentBalance} + ${adjustment}`
+      })
+      .where(eq(schema.userProfiles.userId, transaction.userId));
+
+    // 4. Finally, delete the record
+    const result = await tx.delete(schema.transactions)
+      .where(eq(schema.transactions.id, id));
+
+    return (result.rowCount ?? 0) > 0;
+  });
+}
+
+async generateOTP(userId: string): Promise<string> {
+  const code = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
+  const expires = new Date(Date.now() + 10 * 60000); // 10 min expiry
+  await db.update(schema.users)
+    .set({ otpCode: code, otpExpires: expires })
+    .where(eq(schema.users.id, userId));
+  return code;
+}
+
+async verifyUser(userId: string, code: string): Promise<boolean> {
+  const [user] = await db.select().from(schema.users)
+    .where(and(
+      eq(schema.users.id, userId),
+      eq(schema.users.otpCode, code),
+      gt(schema.users.otpExpires, new Date())
+    ));
+  if (!user) return false;
+  await db.update(schema.users)
+    .set({ isVerified: true, otpCode: null, otpExpires: null })
+    .where(eq(schema.users.id, userId));
+  return true;
+}
+
   async deleteUser(id: string): Promise<void> {
     await db.transaction(async (tx) => {
         await tx.delete(schema.transactions).where(eq(schema.transactions.userId, id));
@@ -163,7 +237,7 @@ export class DatabaseStorage implements IStorage {
     return {
       firstName: u?.firstName || null,
       lastName: u?.lastName || null,
-      username: u?.username || "Guest",
+      email: u?.email || "Guest",
       tier: p?.tier || "Bronze"
     };
   }
@@ -265,7 +339,6 @@ async createTransaction(t: InsertTransaction & { userId: string }) {
     });
   }
 
-  async deleteTransaction(id: string) { const r = await db.delete(schema.transactions).where(eq(schema.transactions.id, id)); return (r.rowCount ?? 0) > 0; }
   async getUserSettings(userId: string) { const [s] = await db.select().from(schema.userSettings).where(eq(schema.userSettings.userId, userId)); return s; }
   async createUserSettings(s: InsertUserSettings) { const [st] = await db.insert(schema.userSettings).values(s).returning(); return st; }
   async updateUserSettings(userId: string, d: Partial<InsertUserSettings>) { const [s] = await db.update(schema.userSettings).set(d).where(eq(schema.userSettings.userId, userId)).returning(); return s; }
@@ -354,7 +427,7 @@ async getLeaderboard() {
   const result = await db
     .select({
       userId: schema.users.id,
-      username: schema.users.username,
+      email: schema.users.email,
       firstName: schema.users.firstName,
       lastName: schema.users.lastName,
 
@@ -389,7 +462,7 @@ async getLeaderboard() {
     userId: user.userId,
     displayName: user.firstName
       ? `${user.firstName} ${user.lastName ?? ""}`.trim()
-      : user.username,
+      : user.email,
     savingsPercentage: Math.round(Number(user.savingsRate ?? 0)),
   }));
 }

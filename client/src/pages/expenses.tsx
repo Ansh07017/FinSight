@@ -91,6 +91,29 @@ export default function ExpensesPage() {
     },
   });
 
+  // Add this mutation in ExpensesPage.tsx
+const deleteMutation = useMutation({
+  mutationFn: transactions.delete,
+  onSuccess: () => {
+    // Refresh all financial data so the Leaderboard and Dashboard update
+    queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-trend"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-categories"] });
+    queryClient.invalidateQueries({ queryKey: ["transactions-recent"] });
+    queryClient.invalidateQueries({ queryKey: ["profile-full"] });
+    queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+
+    toast({ 
+      title: "Transaction deleted", 
+      description: "Your balance and leaderboard rank have been updated." 
+    });
+  },
+  onError: (error: Error) => {
+    toast({ variant: "destructive", title: "Deletion failed", description: error.message });
+  },
+});
+
   const resetForm = () => {
     setAmount("");
     setDescription("");
@@ -261,44 +284,81 @@ export default function ExpensesPage() {
             </Select>
           </div>
 
-          <div className="divide-y divide-border/20">
-            {txLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-3">
-                 <Loader2 className="w-10 h-10 animate-spin text-[#00D4AA]" />
-                 <p className="text-muted-foreground animate-pulse">Syncing Ledger...</p>
-              </div>
-            ) : filteredTransactions.length > 0 ? (
-              filteredTransactions.map((tx: any) => (
-                <div key={tx.id} className="grid grid-cols-12 items-center p-5 hover:bg-[#00D4AA]/5 transition-all group border-l-4 border-transparent hover:border-[#00D4AA]">
-                  <div className="col-span-7 md:col-span-5 font-bold text-white flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tx.type === 'income' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
-                      {tx.type === 'income' ? <ArrowDownRight className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-sm md:text-base leading-tight">{tx.title}</span>
-                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">{tx.category}</span>
-                    </div>
-                  </div>
-                  <div className="hidden md:flex col-span-3 items-center gap-2 text-xs text-muted-foreground font-medium">
-                      <CalendarIcon className="w-3 h-3" />
-                      {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </div>
-                  <div className="hidden lg:flex col-span-1 text-xs text-muted-foreground">
-                      <span className="px-2 py-0.5 bg-secondary/50 rounded-md border border-border/50">{tx.paymentMode}</span>
-                  </div>
-                  <div className={`col-span-5 md:col-span-3 text-right font-mono font-black text-base md:text-lg ${tx.type === 'income' ? 'text-[#00D4AA]' : 'text-white'}`}>
-                    <span className="text-xs mr-1 opacity-70 font-sans">{currencySymbol}</span>
-                    {parseFloat(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-              ))
-            ) : (
-                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground italic">
-                    <Search className="w-10 h-10 mb-2 opacity-20" />
-                    No transactions matching your criteria.
-                </div>
-            )}
+<div className="divide-y divide-border/20">
+  {txLoading ? (
+    <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <Loader2 className="w-10 h-10 animate-spin text-[#00D4AA]" />
+      <p className="text-muted-foreground animate-pulse">Syncing Ledger...</p>
+    </div>
+  ) : filteredTransactions.length > 0 ? (
+    filteredTransactions.map((tx: any) => (
+      <div key={tx.id} className="grid grid-cols-12 items-center p-5 hover:bg-[#00D4AA]/5 transition-all group border-l-4 border-transparent hover:border-[#00D4AA]">
+        
+        {/* 1. Title & Category (Left) */}
+        <div className="col-span-6 md:col-span-4 font-bold text-white flex items-center gap-4">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tx.type === 'income' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+            {tx.type === 'income' ? <ArrowDownRight className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
           </div>
+          <div className="flex flex-col">
+            <span className="text-sm md:text-base leading-tight">{tx.title}</span>
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">{tx.category}</span>
+          </div>
+        </div>
+
+        {/* 2. Date (Visible on Medium screens+) */}
+        <div className="hidden md:flex col-span-3 items-center gap-2 text-xs text-muted-foreground font-medium">
+          <CalendarIcon className="w-3 h-3" />
+          {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+        </div>
+
+        {/* 3. Amount (Right Aligned) */}
+        <div className={`col-span-4 md:col-span-3 text-right font-mono font-black text-base md:text-lg ${tx.type === 'income' ? 'text-[#00D4AA]' : 'text-white'}`}>
+          <span className="text-xs mr-1 opacity-70 font-sans">{currencySymbol}</span>
+          {parseFloat(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+        </div>
+
+        {/* 4. Delete Action (Far Right) */}
+        <div className="col-span-2 md:col-span-2 flex justify-end">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-card border-border text-white">
+              <DialogHeader>
+                <DialogTitle>Delete Transaction?</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete "{tx.title}"? This will revert the {currencySymbol}{tx.amount} change to your balance.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-3 mt-4">
+                <Button variant="outline" className="border-border" onClick={() => {}}>Cancel</Button>
+                <Button 
+                  variant="destructive" 
+                  onClick={() => deleteMutation.mutate(tx.id)}
+                  disabled={deleteMutation.isPending}
+                  className="font-bold"
+                >
+                  {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Delete"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+    ))
+  ) : (
+    <div className="flex flex-col items-center justify-center py-24 text-muted-foreground italic gap-4">
+      <Search className="w-12 h-12 opacity-10" />
+      <p>No transactions found matching your criteria.</p>
+    </div>
+  )}
+</div>
         </CardContent>
       </Card>
     </div>

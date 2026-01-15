@@ -38,8 +38,8 @@ const navItems = [
  */
 const getAvatarUrl = (profileData: any): string => {
     const firstName = profileData?.firstName;
-    const username = profileData?.username; 
-    const seed = firstName || username || 'Default';
+    const email = profileData?.email; 
+    const seed = firstName || email || 'Default';
     
     if (seed === 'Default') {
         return 'https://github.com/shadcn.png';

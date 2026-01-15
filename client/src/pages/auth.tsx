@@ -1,5 +1,5 @@
 // client/src/pages/auth.tsx
-
+/*
 import React, { useState } from 'react';
 import { useLocation } from 'wouter'; 
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,15 @@ import { auth } from "@/lib/api";
 import authBg from "@assets/generated_images/dark_minimalist_abstract_geometric_financial_background.png";
 import logoImg from "@assets/generated_images/minimalist_mint_green_rupee_logo_symbol.png";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { FcGoogle } from "react-icons/fc"; // RESTORED IMPORT
+import { FcGoogle } from "react-icons/fc";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"; 
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
@@ -23,18 +31,21 @@ export default function AuthPage() {
   const [activeTab, setActiveTab] = useState("login");
   
   // Form States
-  const [loginUsername, setLoginUsername] = useState("");
+  const [loginemail, setLoginemail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const [registerUsername, setRegisterUsername] = useState("");
+  const [registeremail, setRegisteremail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
+  
+  const [resetEmail, setResetEmail] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginUsername || !loginPassword) return;
+    if (!loginemail || !loginPassword) return;
     
     setIsLoading(true);
     try {
-      const response = await auth.login(loginUsername, loginPassword);
+      const response = await auth.login(loginemail, loginPassword);
       
       if (response?.user) {
         if (response.user.needsOnboarding) {
@@ -49,37 +60,73 @@ export default function AuthPage() {
       toast({
         variant: "destructive",
         title: "Login Failed",
-        description: error.message || "Invalid username or password",
+        description: error.message || "Invalid email or password",
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!registerUsername || !registerPassword) return;
 
-    setIsLoading(true);
-    try {
-      await auth.register(registerUsername, registerPassword);
-      
-      toast({
-        title: "Account Created",
-        description: "Welcome to FinSaver! Let's get started.",
-      });
+const handleRegister = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!registeremail || !registerPassword) return;
+  setIsLoading(true);
+  try {
+    const response = await auth.register(registeremail, registerPassword);
+    
+    toast({
+      title: "OTP Sent",
+      description: "Please check your email for the 6-digit verification code.",
+    });
 
-      setLocation("/onboarding");
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Registration Failed",
-        description: error.message || "Could not create account",
-      });
-    } finally {
-      setIsLoading(false);
+    // Ensure response contains userId from your backend
+    setLocation(`/verify-otp?userId=${response.userId}`); 
+  } catch (error: any) {
+    toast({ 
+      variant: "destructive", 
+      title: "Registration Failed", 
+      description: error.message 
+    });
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+const handleForgotPassword = async () => {
+  if (!resetEmail) return;
+  setIsResetting(true);
+  try {
+    const response = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: resetEmail }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || "Failed to send reset link");
     }
-  };
+
+    toast({
+      title: "Link Sent",
+      description: "Please check your email to reset your password.",
+    });
+
+    setResetEmail("");
+    setActiveTab("login"); 
+    
+  } catch (error: any) {
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: error.message || "Could not process request",
+    });
+  } finally {
+    setIsResetting(false);
+  }
+};
 
   // Reusable Google Button Component to keep code clean
   const GoogleAuthButton = () => (
@@ -107,7 +154,7 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen w-full flex bg-background">
-      {/* Left Side - Hero Branding */}
+       
       <div className="hidden lg:flex w-1/2 relative bg-black items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0 opacity-40">
            <img src={authBg} alt="Background" className="w-full h-full object-cover" />
@@ -126,7 +173,7 @@ export default function AuthPage() {
         </div>
       </div>
 
-      {/* Right Side - Form Section */}
+      
       <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-background">
         <Card className="w-full max-w-md border-border/50 bg-card/50 backdrop-blur-sm shadow-2xl">
           <CardHeader className="space-y-1 text-center">
@@ -148,13 +195,13 @@ export default function AuthPage() {
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="login-username">Username</Label>
+                    <Label htmlFor="login-email">email</Label>
                     <Input
-                      id="login-username"
+                      id="login-email"
                       type="text"
-                      placeholder="Enter your username" 
-                      value={loginUsername}
-                      onChange={(e) => setLoginUsername(e.target.value)}
+                      placeholder="Enter your email" 
+                      value={loginemail}
+                      onChange={(e) => setLoginemail(e.target.value)}
                       className="bg-secondary/50 border-border"
                       required
                     />
@@ -162,6 +209,48 @@ export default function AuthPage() {
 
                   <div className="space-y-2 relative">
                     <Label htmlFor="login-password">Password</Label>
+                    <Dialog>
+      <DialogTrigger asChild>
+        <button 
+          type="button" 
+          className="text-xs text-primary hover:underline transition-all hover:text-primary/80"
+        >
+          Forgot Password?
+        </button>
+      </DialogTrigger>
+      <DialogContent className="bg-card border-border shadow-2xl sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle className="text-white">Reset Password</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Enter your email address and we'll send you a link to restore access to your account.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="reset-email">Email Address</Label>
+            <Input
+              id="reset-email"
+              type="email"
+              placeholder="email@example.com"
+              value={resetEmail}
+              onChange={(e) => setResetEmail(e.target.value)}
+              className="bg-secondary/50 border-border"
+            />
+          </div>
+          <Button 
+            onClick={handleForgotPassword} 
+            className="w-full bg-primary text-black font-semibold" 
+            disabled={isResetting}
+          >
+            {isResetting ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending...</>
+            ) : (
+              "Send Reset Link"
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
                     <Input
                       id="login-password"
                       type={showPassword ? "text" : "password"}
@@ -186,19 +275,19 @@ export default function AuthPage() {
                     {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</> : "Sign In"}
                   </Button>
                 </form>
-                <GoogleAuthButton /> {/* RESTORED FOR LOGIN */}
+                <GoogleAuthButton /> 
               </TabsContent>
               
               <TabsContent value="register">
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="register-username">New Username</Label>
+                    <Label htmlFor="register-email">New email</Label>
                     <Input
-                      id="register-username"
+                      id="register-email"
                       type="text"
                       placeholder="Choose a handle" 
-                      value={registerUsername}
-                      onChange={(e) => setRegisterUsername(e.target.value)}
+                      value={registeremail}
+                      onChange={(e) => setRegisteremail(e.target.value)}
                       className="bg-secondary/50 border-border"
                       required
                     />
@@ -230,7 +319,400 @@ export default function AuthPage() {
                     {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Initializing...</> : "Create Account"}
                   </Button>
                 </form>
-                <GoogleAuthButton /> {/* RESTORED FOR REGISTER */}
+                <GoogleAuthButton /> 
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}*/
+
+import React, { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'wouter'; 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { auth } from "@/lib/api";
+import authBg from "@assets/generated_images/dark_minimalist_abstract_geometric_financial_background.png";
+import logoImg from "@assets/generated_images/minimalist_mint_green_rupee_logo_symbol.png";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { FcGoogle } from "react-icons/fc";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"; 
+
+export default function AuthPage() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [activeTab, setActiveTab] = useState("login");
+  
+  // Form States
+  const [loginemail, setLoginemail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [registeremail, setRegisteremail] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  
+  const [resetEmail, setResetEmail] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const [resetStage, setResetStage] = useState<"email" | "otp">("email");
+  const [otpCode, setOtpCode] = useState("");
+  const [resendTimer, setResendTimer] = useState(0);
+  const [userIdForReset, setUserIdForReset] = useState<string | null>(null);
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+  return () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+  };
+}, []);
+  // Handle Login Flow
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginemail || !loginPassword) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await auth.login(loginemail, loginPassword);
+      
+      if (response?.user) {
+        if (response.user.needsOnboarding) {
+          setLocation("/onboarding");
+        } else {
+          setLocation("/"); 
+        }
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Login Failed",
+        description: error.message || "Invalid email or password",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Registration with OTP Redirect
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!registeremail || !registerPassword) return;
+
+    setIsLoading(true);
+    try {
+      const response = await auth.register(registeremail, registerPassword);
+      
+      toast({
+        title: "Verification Required",
+        description: "Please check your email (or terminal) for the 6-digit code.",
+      });
+
+      // Redirect to OTP page with the userId returned from backend
+      setLocation(`/verify-otp?userId=${response.userId}`);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Registration Failed",
+        description: error.message || "Could not create account",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Forgot Password Flow
+// Start 45s countdown
+const startCountdown = () => {
+  // 1. Clear any existing timer to prevent duplicates
+  if (timerRef.current) {
+    clearInterval(timerRef.current);
+  }
+
+  setResendTimer(45);
+
+  // 2. Assign the new interval to the ref
+  timerRef.current = setInterval(() => {
+    setResendTimer((prev) => {
+      if (prev <= 1) {
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = null;
+        return 0;
+      }
+      return prev - 1;
+    });
+  }, 1000);
+};
+
+// Update handleForgotPassword to move to OTP stage
+const handleForgotPassword = async () => {
+  if (!resetEmail) return;
+  setIsResetting(true);
+  try {
+    const response = await fetch("/api/auth/forgotpassword", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: resetEmail }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Failed to send code");
+
+    setUserIdForReset(data.userId); // Store ID for the next page
+    setResetStage("otp"); // Move to stage 2
+    startCountdown(); // Start 45s timer
+    toast({ title: "OTP Sent", description: "Check your email for the reset code." });
+  } catch (error: any) {
+    toast({ variant: "destructive", title: "Error", description: error.message });
+  } finally {
+    setIsResetting(false);
+  }
+};
+
+  const GoogleAuthButton = () => (
+    <>
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-border" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+        </div>
+      </div>
+      <Button 
+        variant="outline" 
+        type="button"
+        className="w-full border-border/50 bg-secondary/30 hover:bg-secondary/50 text-white" 
+        onClick={() => window.location.href = "/api/auth/google"}
+      >
+        <FcGoogle className="mr-2 h-5 w-5" />
+        Continue with Google
+      </Button>
+    </>
+  );
+
+  return (
+    <div className="min-h-screen w-full flex bg-background">
+      <div className="hidden lg:flex w-1/2 relative bg-black items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 z-0 opacity-40">
+           <img src={authBg} alt="Background" className="w-full h-full object-cover" />
+        </div>
+        <div className="relative z-20 max-w-md text-center p-8">
+          <div className="mb-6 flex justify-center">
+            <div className="w-20 h-20 rounded-2xl bg-primary/10 backdrop-blur-xl border border-primary/20 flex items-center justify-center">
+              <img src={logoImg} alt="Logo" className="w-12 h-12" />
+            </div>
+          </div>
+          <h1 className="text-4xl font-bold text-white mb-4">Finsight</h1>
+          <p className="text-muted-foreground text-lg leading-relaxed">
+            Your intelligent financial companion. Experience real-time behavioral insights.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-background">
+        <Card className="w-full max-w-md border-border/50 bg-card/50 backdrop-blur-sm shadow-2xl">
+          <CardHeader className="space-y-1 text-center">
+            <CardTitle className="text-2xl font-bold text-white">Access Dashboard</CardTitle>
+            <CardDescription>Secure login to your financial intelligence suite</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6 bg-muted/50">
+                <TabsTrigger value="login">Login</TabsTrigger>
+                <TabsTrigger value="register">Register</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="login">
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email">Email</Label>
+                    <Input
+                      id="login-email"
+                      type="email"
+                      placeholder="Enter your email" 
+                      value={loginemail}
+                      onChange={(e) => setLoginemail(e.target.value)}
+                      className="bg-secondary/50 border-border"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2 relative">
+                    <div className="flex justify-between items-center">
+                      <Label htmlFor="login-password">Password</Label>
+
+                        <Dialog 
+                        open={isDialogOpen} 
+                        onOpenChange={(open) => {
+                        setIsDialogOpen(open);
+                        if (!open) {
+                        // Reset everything when dialog closes
+                        setTimeout(() => {
+                        setResetStage("email");
+                        setOtpCode("");
+                        if (timerRef.current) clearInterval(timerRef.current);
+                        setResendTimer(0);
+                        }, 300); // Small delay to wait for close animation
+                        }
+                        }}>
+                        
+                        <DialogTrigger asChild>
+                          <button type="button" className="text-xs text-primary hover:underline transition-all">
+                            Forgot Password?
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-card border-border shadow-2xl sm:max-w-[425px]">
+  <DialogHeader>
+    <DialogTitle className="text-white">
+      {resetStage === "email" ? "Reset Password" : "Verify OTP"}
+    </DialogTitle>
+    <DialogDescription className="text-muted-foreground">
+      {resetStage === "email" 
+        ? "Enter your email address to receive a 6-digit reset code." 
+        : "Enter the 6-digit code sent to your email."}
+    </DialogDescription>
+  </DialogHeader>
+
+  <div className="space-y-4 py-4">
+    {resetStage === "email" ? (
+      <>
+        <div className="space-y-2">
+          <Label>Email Address</Label>
+          <Input
+            type="email"
+            placeholder="email@example.com"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+            className="bg-secondary/50 border-border"
+          />
+        </div>
+        <Button onClick={handleForgotPassword} className="w-full bg-primary text-black" disabled={isResetting}>
+          {isResetting ? <Loader2 className="animate-spin" /> : "Send Reset Code"}
+        </Button>
+      </>
+    ) : (
+      <>
+        <div className="space-y-2">
+          <Label>Verification Code</Label>
+          <Input
+            type="text"
+            placeholder="000000"
+            maxLength={6}
+            className="text-center text-2xl tracking-widest bg-secondary/50"
+            value={otpCode}
+            onChange={(e) => setOtpCode(e.target.value)}
+          />
+        </div>
+        <Button 
+  className="w-full bg-primary text-black font-bold" 
+  disabled={otpCode.length !== 6} // Prevents submission of random/short numbers
+  onClick={() => {
+  if (otpCode.length === 6) {
+    setLocation(`/resetpassword?token=${otpCode}&userId=${userIdForReset}`);
+  }
+}}
+>
+  Verify & Continue
+</Button>
+        <Button 
+          variant="ghost" 
+          className="w-full text-xs" 
+          disabled={resendTimer > 0|| isResetting} 
+          onClick={handleForgotPassword}
+        >
+          {resendTimer > 0 ? `Resend code in ${resendTimer}s` : "Resend Code"}
+        </Button>
+      </>
+    )}
+  </div>
+</DialogContent>
+                      </Dialog>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="login-password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••" 
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        className="bg-secondary/50 border-border pr-10"
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full p-2 text-muted-foreground hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button type="submit" className="w-full bg-primary text-black font-semibold" disabled={isLoading}>
+                    {isLoading ? <Loader2 className="animate-spin" /> : "Sign In"}
+                  </Button>
+                </form>
+                <GoogleAuthButton />
+              </TabsContent>
+              
+              <TabsContent value="register">
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="register-email">New Email</Label>
+                    <Input
+                      id="register-email"
+                      type="email"
+                      placeholder="Choose a handle" 
+                      value={registeremail}
+                      onChange={(e) => setRegisteremail(e.target.value)}
+                      className="bg-secondary/50 border-border"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2 relative">
+                    <Label htmlFor="register-password">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="register-password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Minimum 8 characters" 
+                        value={registerPassword}
+                        onChange={(e) => setRegisterPassword(e.target.value)}
+                        className="bg-secondary/50 border-border pr-10"
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full p-2 text-muted-foreground hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <Button type="submit" className="w-full bg-primary text-black font-semibold" disabled={isLoading}>
+                    {isLoading ? <Loader2 className="animate-spin" /> : "Create Account"}
+                  </Button>
+                </form>
+                <GoogleAuthButton />
               </TabsContent>
             </Tabs>
           </CardContent>

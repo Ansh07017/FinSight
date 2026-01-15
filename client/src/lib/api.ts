@@ -30,22 +30,24 @@ export async function apiRequest(endpoint: string, options?: RequestInit) {
 
 // ========== Auth APIs ==========
 export const auth = {
-  register: (username: string, password: string) =>
+  
+  register: (email: string, password: string) =>
     apiRequest("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email, password }),
     }),
 
-  login: (username: string, password: string) =>
+  login: (email: string, password: string) =>
     apiRequest("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email, password }),
     }),
 
   logout: () =>
     apiRequest("/api/auth/logout", {
       method: "POST",
     }),
+
 
   me: () => apiRequest("/api/auth/me"),
 
@@ -59,6 +61,11 @@ export const auth = {
     apiRequest("/api/auth/account", {
       method: "DELETE",
       body: JSON.stringify({ password }),
+    }),
+    verifyOtp: (userId: string, code: string) =>
+    apiRequest("/api/auth/verify-otp", {
+      method: "POST",
+      body: JSON.stringify({ userId, code }),
     }),
 };
 

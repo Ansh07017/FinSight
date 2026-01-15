@@ -31,8 +31,8 @@ interface GoalUpdateData {
 
 const getAvatarUrl = (userData: any): string => {
     const firstName = userData?.firstName;
-    const username = userData?.username; 
-    const seed = firstName || username || 'Default';
+    const email = userData?.email; 
+    const seed = firstName || email || 'Default';
     
     if (seed === 'Default') {
         return 'https://github.com/shadcn.png'; 
@@ -58,6 +58,7 @@ const deleteAccountWrapper: MutationFunction<void, string> = async (password) =>
     await auth.deleteAccount(password);
 }
 
+
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -77,6 +78,7 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  
   
   // --- Delete Account State ---
   const [confirmDeletePassword, setConfirmDeletePassword] = useState("");
@@ -279,7 +281,7 @@ export default function SettingsPage() {
                   <p className="text-xl font-bold text-white">
                       {profileResponse?.user?.firstName} {profileResponse?.user?.lastName}
                   </p>
-                  <p className="text-sm text-muted-foreground">@{profileResponse?.user?.username}</p>
+                  <p className="text-sm text-muted-foreground">@{profileResponse?.user?.email}</p>
               </div>
             </div>
             

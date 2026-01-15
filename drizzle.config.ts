@@ -1,5 +1,7 @@
 import { defineConfig } from "drizzle-kit";
+import * as dotenv from "dotenv";
 
+dotenv.config();
 if (!process.env.PG_CONNECTION_STRING) {
   throw new Error("DATABASE_URL, ensure the database is provisioned");
 }

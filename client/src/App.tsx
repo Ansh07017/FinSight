@@ -14,7 +14,9 @@ import RewardsPage from "@/pages/rewards";
 import SettingsPage from "@/pages/settings";
 import ReportsPage from "@/pages/reports";
 import OnboardingPage from "@/pages/onboarding";
+import ResetPassword from "@/pages/resetpassword";
 import LeaderBoardPage from "@/pages/leaderboard";
+import VerifyOTP from "@/pages/verifyotp";
 import { AuthProvider } from "@/components/AuthContext"; 
 import Layout from "@/components/layout"; 
 
@@ -23,7 +25,10 @@ function AppRouter() {
     <Switch>
       {/* 1. PUBLIC & ONBOARDING ROUTES (No Layout shell) */}
       <Route path="/auth" component={AuthPage} />
+      <Route path="/resetpassword" component={ResetPassword} />
+      <Route path="/verifyotp" component={VerifyOTP} />
       <Route path="/onboarding" component={OnboardingPage} />
+      
 
       {/* 2. PROTECTED ROUTES (Wrapped in Layout) */}
       <Route path="/">

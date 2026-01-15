@@ -9,15 +9,19 @@ import { z } from "zod";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
   // UPDATED: Password is now nullable to support Google OAuth users
   password: text("password"), 
   firstName: text("first_name"),
   lastName: text("last_name"),
-  email: text("email"),
-  phone: text("phone"),
+  phone: text("phone").unique(),
   googleId: text("google_id").unique(),
   createdAt: timestamp("created_at").defaultNow(),
+  resetToken: text("reset_token"),
+  resetTokenExpires: timestamp("reset_token_expires"),
+  isVerified: boolean("is_verified").default(false).notNull(),
+  otpCode: text("otp_code"),
+  otpExpires: timestamp("otp_expires"),
 });
 
 export const userProfiles = pgTable("user_profiles", {
@@ -71,8 +75,8 @@ export const userSettings = pgTable("user_settings", {
 
 // UPDATED: insertUserSchema now correctly handles optional passwords
 export const insertUserSchema = createInsertSchema(users, {
-  password: z.string().min(8, "Password must be at least 8 characters").optional(),
-  email: z.string().email("Invalid email address").optional(),
+  password: z.string().min(8, "Password must be at least 8 characters").nullable().optional(),
+  email: z.string().email("Invalid email address"),
 }).omit({ 
   id: true, 
   createdAt: true 
