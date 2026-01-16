@@ -2,20 +2,24 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import { metaImagesPlugin } from "./vite-plugin-meta-images.ts";
+import { metaImagesPlugin } from "./vite-plugin-meta-images";
+
+// FIX: Use process.cwd() instead of import.meta.dirname
+// This prevents the "import.meta is not available with CJS output" warning
+const rootDir = process.cwd();
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), metaImagesPlugin()],
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      "@": path.resolve(rootDir, "client", "src"),
+      "@shared": path.resolve(rootDir, "shared"),
+      "@assets": path.resolve(rootDir, "attached_assets"),
     },
   },
-  root: path.resolve(import.meta.dirname, "client"),
+  root: path.resolve(rootDir, "client"),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist", "public"),
+    outDir: path.resolve(rootDir, "dist", "public"),
     emptyOutDir: true,
     target: "esnext", // Modern JS = Smaller & Faster code
     reportCompressedSize: false, // Speeds up the build process
