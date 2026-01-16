@@ -1,9 +1,11 @@
+// server/index.ts
+
 import * as dotenv from 'dotenv';
 dotenv.config();
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes.ts";
-import { serveStatic } from "./static.ts";
+import { registerRoutes } from "./routes";
+import { serveStatic } from "./static";
 import { createServer } from "http";
 
 const app = express();
@@ -68,32 +70,29 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Routes are registered here. 
-  // NOTE: Ensure registerRoutes in routes.ts returns the app or server instance correctly.
+  // 1. Register API Routes
   await registerRoutes(httpServer, app);
 
-  // Global Error Handler
+  // 2. Global Error Handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
     res.status(status).json({ message });
   });
 
-  if (process.env.NODE_ENV === "production") {
+  // 3. Serve Frontend (Production vs Dev)
+  if (app.get("env") === "production") {
     serveStatic(app);
   } else {
-    const { setupVite } = await import("./vite.ts");
+    const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
 
-  // ONLY start the local listener if we are NOT on Vercel/Production.
-  // This allows the app to work locally while Vercel handles requests serverlessly.
-  if (process.env.NODE_ENV !== "production") {
-    const port = parseInt(process.env.PORT || "3000", 10);
-    const host = process.env.HOST || "127.0.0.1";
+  // 4. Start Server (FIXED: Always listen, bind to 0.0.0.0)
+  const port = parseInt(process.env.PORT || "3000", 10);
+  const host = "0.0.0.0"; // Required for Render/Docker
 
-    httpServer.listen(port, host, () => {
-      log(`serving at http://${host}:${port}`);
-    });
-  }
+  httpServer.listen(port, host, () => {
+    log(`Server running on http://${host}:${port}`);
+  });
 })();
