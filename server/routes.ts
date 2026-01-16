@@ -1,563 +1,491 @@
-import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import type { Express } from "express";
+// server/routes.ts
+
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import ConnectPg from "connect-pg-simple";
 import pkg from "pg";
 import bcrypt from "bcryptjs";
-import { storage } from "./storage.ts";
-import { sendEmail } from "./lib/mail.ts";
-import { insertUserSchema, insertUserProfileSchema, insertTransactionSchema, insertUserSettingsSchema } from "../shared/schema.ts";
+import rateLimit from 'express-rate-limit';
+
+import { storage } from "./storage";
+import { sendEmail } from "./lib/mail";
+import { 
+  insertUserSchema, 
+  insertUserProfileSchema, 
+  insertTransactionSchema, 
+  insertBehavioralLogSchema
+} from "@shared/schema";
 
 const pgStore = ConnectPg(session);
 const { Pool } = pkg;
-// Setup Passport Local Strategy (PATCHED BACK IN)
-passport.use(
-  new LocalStrategy(
-    { usernameField: 'email' },
-    async (email, password, done) => {
-    try {
-      const user = await storage.getUserByemail(email);
-      if (!user || !user.password) {
-        return done(null, false, { message: "Invalid email or password" });
-      }
-      if (user.isVerified === false) {
-          return done(null, false, { message: "Please verify your account first." });
-        }
-      const isMatch = await bcrypt.compare(password, user.password as string);
-      if (!isMatch) {
-        return done(null, false, { message: "Invalid email or password" });
-      }
-      return done(null, user);
-    } catch (err) {
-      return done(err);
-    }
-  })
-);
 
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-      callbackURL: "/api/auth/google/callback",
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        // 1. Check if user already exists by Google ID
-        let user = await storage.getUserByGoogleId(profile.id);
-        
-        if (!user) {
-          const googleEmail = profile.emails?.[0]?.value;
-          if (!googleEmail) return done(new Error("No email found in Google profile"));
+// =========================================================
+//  GAMIFICATION ENGINE (Server-Side Authority)
+// =========================================================
 
-          // 2. Check if user exists by email (to link account)
-          user = await storage.getUserByemail(googleEmail);
+// 1. TIER CALCULATION
+const calculateTier = (xp: number, createdAt: Date | null) => {
+    const now = new Date().getTime();
+    const startDate = createdAt ? new Date(createdAt) : new Date();
+    const start = startDate.getTime();
+    
+    const daysActive = Math.max(0, Math.floor((now - start) / (1000 * 60 * 60 * 24)));
+    
+    if (xp >= 50000 && daysActive >= 225) return "The Visionary";
+    if (xp >= 25000 && daysActive >= 105) return "The Architect";
+    if (xp >= 10000 && daysActive >= 45)  return "The Strategist";
+    if (xp >= 2000  && daysActive >= 15)  return "The Pathfinder";
+    
+    return "The Spark";
+};
 
-          if (user) {
-            // Link Google ID to existing email account
-            user = await storage.updateUser(user.id, { googleId: profile.id });
-          } else {
-            // 3. Create brand new user
-            user = await storage.createUser({
-              email: googleEmail,
-              googleId: profile.id,
-              firstName: profile.name?.givenName || "",
-              lastName: profile.name?.familyName || "",
-              password: null, // OAuth users have no password
-            });
-            await storage.createUserSettings({ userId: user.id });
-          }
-        }
-        return done(null, user);
-      } catch (err) {
-        return done(err);
-      }
-    }
-  )
-);
+// 2. EFFICIENCY MULTIPLIER
+const calculateEfficiencyMultiplier = async (userId: string) => {
+    const stats = await storage.getDashboardStats(userId);
+    const income = Number(stats.income);
+    const savings = Number(stats.savings);
+    
+    if (income <= 0) return 1.0;
+    
+    const rate = (savings / income) * 100;
+    if (rate > 30) return 1.5; 
+    if (rate > 20) return 1.2; 
+    return 1.0; 
+};
 
-passport.serializeUser((user: any, done) => {
-  done(null, user.id);
+// --- RATE LIMITERS ---
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { message: "Too many login attempts. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
+const otpLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 3,
+  message: { message: "Please wait before requesting another code." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// --- PASSPORT CONFIG ---
+passport.use(new LocalStrategy({ usernameField: 'email' }, async (email, password, done) => {
+  try {
+    const user = await storage.getUserByemail(email);
+    if (!user || !user.password) return done(null, false, { message: "Invalid credentials" });
+    if (!user.isVerified) return done(null, false, { message: "Please verify your account first." });
+    const isMatch = await bcrypt.compare(password, user.password);
+    return isMatch ? done(null, user) : done(null, false, { message: "Invalid credentials" });
+  } catch (err) { return done(err); }
+}));
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID || "",
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+    callbackURL: "/api/auth/google/callback",
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+      let user = await storage.getUserByGoogleId(profile.id);
+      if (!user) {
+        const email = profile.emails?.[0]?.value;
+        if (!email) return done(new Error("No email found in Google profile"));
+        user = await storage.getUserByemail(email);
+        if (user) {
+          user = await storage.updateUser(user.id, { googleId: profile.id });
+        } else {
+          user = await storage.createUser({
+            email, googleId: profile.id, firstName: profile.name?.givenName || "",
+            lastName: profile.name?.familyName || "", password: null, 
+          });
+          await storage.createUserSettings({ userId: user.id });
+        }
+      }
+      return done(null, user);
+    } catch (err) { return done(err); }
+  }
+));
+
+passport.serializeUser((user: any, done) => done(null, user.id));
 passport.deserializeUser(async (id: string, done) => {
   try {
     const user = await storage.getUser(id);
     done(null, user);
-  } catch (error) {
-    done(error);
-  }
+  } catch (error) { done(error); }
 });
 
-// Auth middleware
-function requireAuth(req: any, res: any, next: any) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
+// --- MIDDLEWARE ---
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (req.isAuthenticated()) return next();
   res.status(401).json({ message: "Unauthorized" });
 }
 
-// Onboarding Helper
-const needsOnboarding = async (userId: string): Promise<boolean> => {
-    try {
-        const profile = await storage.getUserProfile(userId);
-        return !profile || !profile.userType;
-    } catch (e) {
-        return true; 
-    }
+// Blocks users without passwords (Social Logins)
+async function requirePasswordUser(req: Request, res: Response, next: NextFunction) {
+  const user = req.user as any;
+  const userData = await storage.getUser(user.id);
+  if (!userData) return res.status(404).json({ message: "User not found" });
+  if (!userData.password) return res.status(400).json({ message: "Action not allowed for social accounts. Please create a password in settings." });
+  (req as any).fullUser = userData; 
+  next();
 }
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Express> {
-  const pool = new Pool({
-    connectionString: process.env.PG_CONNECTION_STRING,
-  });
+const needsOnboarding = async (userId: string): Promise<boolean> => {
+  try {
+    const profile = await storage.getUserProfile(userId);
+    return !profile || !profile.userType; 
+  } catch { return true; }
+}
+
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Express> {
+  const pool = new Pool({ connectionString: process.env.PG_CONNECTION_STRING });
+  
   app.set("trust proxy", 1);
-  app.use(
-    session({
-      store: new pgStore({ pool,tableName: 'session', // Correct placement
-      schemaName: 'public', // Correct placement
-      createTableIfMissing: true }),
-      secret: process.env.SESSION_SECRET || "finsaver-secret-key",
-      resave: false,
-      saveUninitialized: false,
-      proxy: true, 
-      cookie: { 
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
-      },
-    })
-  );
+  app.use(session({
+    store: new pgStore({ pool, tableName: 'session', createTableIfMissing: true }),
+    secret: process.env.SESSION_SECRET || "finsaver-secret-key",
+    resave: false, saveUninitialized: false, proxy: true,
+    cookie: { maxAge: 30 * 24 * 60 * 60 * 1000, secure: process.env.NODE_ENV === "production", sameSite: process.env.NODE_ENV === "production" ? "none" : "lax" },
+  }));
 
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // ========== Auth Routes ==========
-
-  app.post("/api/auth/login", (req, res, next) => {
-    passport.authenticate("local", async (err: any, user: any, info: any) => {
+  // ========== AUTH ROUTES ==========
+  app.post("/api/auth/login", loginLimiter, (req, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) return next(err);
-      if (!user) return res.status(401).json({ message: info?.message || "Authentication failed" });
-
+      if (!user) return res.status(401).json({ message: info?.message || "Auth failed" });
       req.login(user, async (err) => {
         if (err) return next(err);
-        const onboardingRequired = await needsOnboarding(user.id);
-        res.json({ 
-            user: { id: user.id, email: user.email, needsOnboarding: onboardingRequired } 
-        });
+        const onboarding = await needsOnboarding(user.id);
+        res.json({ user: { id: user.id, email: user.email, needsOnboarding: onboarding } });
       });
     })(req, res, next);
   });
 
+  app.post("/api/auth/register", otpLimiter, async (req, res) => {
+    try {
+      const parsedBody = insertUserSchema.parse(req.body);
+      if (!parsedBody.password) return res.status(400).json({ message: "Password required" });
+      
+      const { email, password } = parsedBody;
+      if (await storage.getUserByemail(email)) return res.status(400).json({ message: "Email exists" });
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await storage.createUser({ email, password: hashedPassword, isVerified: false });
+      const otp = await storage.generateOTP(user.id);
+
+      await sendEmail(email, 'Verify FinSight', 
+        `<div style="font-family:sans-serif;padding:20px;border:1px solid #eee;border-radius:8px;">
+           <h2>Welcome to FinSight!</h2><p>Your verification code:</p>
+           <h1 style="color:#00D4AA;background:#f9f9f9;padding:10px;display:inline-block;">${otp}</h1>
+         </div>`);
+      res.status(201).json({ userId: user.id, requiresVerification: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.post("/api/auth/logout", (req, res) => {
-    req.logout((err) => {
-      if (err) return res.status(500).json({ message: "Logout failed" });
-      res.json({ message: "Logged out successfully" });
+    req.logout(() => res.json({ message: "Logged out" }));
+  });
+
+  // 1. UPDATED ME ROUTE: Returns hasPassword flag
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    const user = req.user as any;
+    const fullUser = await storage.getUser(user.id);
+    res.json({ 
+        user: { 
+            id: user.id, 
+            email: user.email,
+            // Boolean flag for Settings page
+            hasPassword: !!fullUser?.password 
+        } 
     });
   });
 
-  app.get("/api/auth/me", requireAuth, (req, res) => {
-    const user = req.user as any;
-    res.json({ user: { id: user.id, email: user.email } });
-  });
-
-  app.get(
-    "/api/auth/google",
-    passport.authenticate("google", { scope: ["profile", "email"] })
-  );
-
-  app.get(
-    "/api/auth/google/callback",
-    passport.authenticate("google", { failureRedirect: "/auth" }),
+  app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+  app.get("/api/auth/google/callback", passport.authenticate("google", { failureRedirect: "/auth" }),
     async (req, res) => {
       const user = req.user as any;
-      const onboardingRequired = await needsOnboarding(user.id);
-      res.redirect(onboardingRequired ? "/onboarding" : "/");
+      const onboarding = await needsOnboarding(user.id);
+      res.redirect(onboarding ? "/onboarding" : "/");
     }
   );
 
-  app.delete("/api/auth/account", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as any;
-      const { password } = req.body;
-      
-      const userData = await storage.getUser(user.id);
-      if (!userData) return res.status(404).json({ message: "User not found" });
-
-      // FIX: Guard clause for null passwords and casting for bcrypt
-      if (!userData.password) {
-        return res.status(400).json({ message: "Social login accounts cannot be deleted with a password check." });
-      }
-
-      const isValid = await bcrypt.compare(password, userData.password as string);
-      if (!isValid) return res.status(400).json({ message: "Invalid password to confirm deletion" });
-
-      await storage.deleteUser(user.id); 
-      
-      req.logout((err) => {
-        if (err) return res.status(500).json({ message: "Error during logout" });
-        res.status(204).send();
-      });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message || "Failed to delete account" });
+  // ========== ACCOUNT RECOVERY ==========
+  app.post("/api/auth/verifyotp", async (req, res) => {
+    const { userId, code } = req.body;
+    if (await storage.verifyUser(userId, code)) {
+      const user = await storage.getUser(userId);
+      if (user) return req.login(user, () => res.json({ message: "Verified" }));
     }
+    res.status(400).json({ message: "Invalid code" });
   });
 
-  app.put("/api/auth/password", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as any;
-      const { currentPassword, newPassword } = req.body;
-      const userData = await storage.getUser(user.id);
-      if (!userData) return res.status(404).json({ message: "User not found" });
-
-      // FIX: Guard clause for null passwords and casting for bcrypt
-      if (!userData.password) {
-        return res.status(400).json({ message: "Social accounts do not have a password to update." });
-      }
-
-      const isValid = await bcrypt.compare(currentPassword, userData.password as string);
-      if (!isValid) return res.status(400).json({ message: "Invalid current password" });
-
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      await storage.updateUser(user.id, { password: hashedPassword });
-      res.status(204).send();
-    } catch (error: any) {
-      res.status(500).json({ message: error.message || "Failed to update password." });
-    }
-  });
-
-  // ========== Profile Routes ==========
-  
-  app.get("/api/profile/summary", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const summary = await storage.getProfileSummary(user.id);
-    res.json(summary);
-  });
-
-  app.get("/api/profile/financial", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const profile = await storage.getUserProfile(user.id);
-    res.json({ 
-        currentBalance: profile?.currentBalance, 
-        totalSavings: profile?.totalSavings 
-    });
-  });
-
-  app.patch("/api/profile/user", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as any;
-      const updatedUser = await storage.updateUser(user.id, req.body);
-      res.json(updatedUser);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message || "Failed to update profile details" });
-    }
-  });
-
-  app.get("/api/profile", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as any;
-      const profile = await storage.getUserProfile(user.id);
-      const userData = await storage.getUser(user.id);
-      res.json({ profile, user: userData });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/profile", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as any;
-      const existingProfile = await storage.getUserProfile(user.id);
-      if (existingProfile) {
-        const updated = await storage.updateUserProfile(user.id, req.body);
-        return res.json(updated);
-      }
-      const profileData = insertUserProfileSchema.parse({ ...req.body, userId: user.id });
-      const profile = await storage.createUserProfile(profileData);
-      res.json(profile);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
-
-  // ========== Transaction Routes ==========
-  
-  app.get("/api/transactions/recent", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const transactions = await storage.getRecentTransactions(user.id, 10);
-    res.json(transactions);
-  });
-
-  app.get("/api/transactions", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const transactions = await storage.getTransactions(user.id);
-    res.json(transactions);
-  });
-
-app.post("/api/transactions", requireAuth, async (req, res) => {
-  try {
-    const user = req.user as any;
-    const dataToValidate = { 
-      ...req.body, 
-      userId: user.id 
-    };
-    const validatedData = insertTransactionSchema.parse(dataToValidate);
-    const transaction = await storage.createTransaction(validatedData);
-    
-    res.json(transaction);
-  } catch (error: any) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-  // ========== Dashboard Routes ==========
-  
-  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const stats = await storage.getDashboardStats(user.id);
-    res.json(stats);
-  });
-
-  app.get("/api/dashboard/trend", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const trend = await storage.getWeeklySpendTrend(user.id);
-    res.json(trend);
-  });
-
-  app.get("/api/dashboard/categories", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const categories = await storage.getCategoryBreakdown(user.id);
-    res.json(categories);
-  });
-
-  // ========== Behavioral Savings ==========
-
-  app.get("/api/behavioral/summary", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const summary = await storage.getBehavioralSummary(user.id);
-    res.json(summary);
-  });
-
-  app.get("/api/behavioral/savings", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const history = await storage.getBehavioralSavings(user.id);
-    res.json(history);
-  });
-
-  app.post("/api/behavioral/savings", requireAuth, async (req, res) => {
-    try {
-        const user = req.user as any;
-        const result = await storage.logBehavioralSavings(user.id, req.body.behaviorType, parseFloat(req.body.estimatedAmount));
-        res.json(result);
-    } catch (error: any) {
-        res.status(500).json({ message: error.message });
-    }
-  });
-  app.post("/api/auth/register", async (req, res, next) => {
-  try {
-    const { email, password } = insertUserSchema.parse(req.body);
-    const existingUser = await storage.getUserByemail(email);
-    if (existingUser) return res.status(400).json({ message: "email already exists" });
-
-    const hashedPassword = await bcrypt.hash(password as string, 10);
-    const user = await storage.createUser({ 
-      email, 
-      password: hashedPassword, 
-      isVerified: false // New users unverified
-    });
-
-    const otp = await storage.generateOTP(user.id); // Generate OTP
-    
-  await sendEmail(
-      email,
-      'Verify your FinSight Account',
-      `<p>Your verification code is: <strong>${otp}</strong></p>`
-    );
-
-    res.status(201).json({ 
-      userId: user.id, 
-      requiresVerification: true 
-    });
-  } catch (error: any) {
-    res.status(500).json({ message: error.message || "Registration failed" });
-  }
-});
-
-  // ========== Settings & Reports ==========
-
-  app.get("/api/settings", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const s = await storage.getUserSettings(user.id);
-    res.json(s);
-  });
-
-  app.patch("/api/settings", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const s = await storage.updateUserSettings(user.id, req.body);
-    res.json(s);
-  });
-
-  app.get("/api/reports/history", requireAuth, async (req, res) => {
-    const user = req.user as any;
-    const h = await storage.getFinancialHistory(user.id);
-    res.json(h);
-  });
-  // Add this to your registerRoutes function in server/routes.ts
-app.get("/api/leaderboard", requireAuth, async (req, res) => {
-  try {
-    const board = await storage.getLeaderboard();
-    res.json(board);
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-app.delete("/api/transactions/:id", requireAuth, async (req, res) => {
-  const success = await storage.deleteTransaction(req.params.id);
-  if (!success) {
-    return res.status(404).json({ message: "Transaction not found" });
-  }
-  res.status(204).send();
-});
-
-// 1. Send Reset Link
-app.post("/api/auth/forgotpassword", async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = await storage.getUserByemail(email);
-
-    if (!user) return res.status(404).json({ message: "User not found" });
-    
-    // Safety check: Don't allow password reset for Google accounts
-    if (user.googleId) {
-      return res.status(400).json({ message: "This account uses Google Login. Please sign in with Google." });
-    }
-
-    // 1. Generate a 6-digit numeric OTP (string format)
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = new Date(Date.now() + 3600000); // 1 hour expiry
-
-    // 2. Save the OTP to the database using the resetToken column
-    await storage.setResetToken(user.id, otp, expires);
-
-    // 3. DEBUG LOG: Very important for Resend Sandbox testing
-    // This allows you to see the code in your terminal since emails won't send to any address
-    console.log(`\n-----------------------------------------`);
-    console.log(`RESET OTP for ${email}: ${otp}`);
-    console.log(`-----------------------------------------\n`);
-
-    // 4. Send the email via Resend
-    await sendEmail(
-    email,
-    'Reset Password Code - FinSight',
-    `
-    <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-      <h2 style="color: #333;">Reset Your Password</h2>
-      <p style="color: #666;">You requested a password reset. Use the 6-digit code below in the app:</p>
-      <h1 style="color: #00D4AA; letter-spacing: 5px; background: #f9f9f9; padding: 10px; display: inline-block;">${otp}</h1>
-      <p style="color: #999; font-size: 12px; margin-top: 20px;">This code will expire in 1 hour.</p>
-    </div>
-    `
-  );
-
-    // 5. Send back the userId so the frontend can build the redirection URL
-    res.json({ message: "Reset code sent successfully", userId: user.id });
-    
-  } catch (error: any) {
-    console.error("Forgot password error:", error);
-    res.status(500).json({ message: error.message || "Could not process request" });
-  }
-});
-
-// 2. Process Reset
-app.post("/api/auth/resetpassword", async (req, res) => {
-  try {
-    const { token, newPassword, userId } = req.body;
-
-    // 1. Fetch user by the ID and the specific OTP token
-    const user = await storage.getUser(userId);
-
-    // 2. Security Check: Does the token match AND is it still valid?
-    if (
-      !user || 
-      user.resetToken !== token || 
-      !user.resetTokenExpires ||
-      new Date() > user.resetTokenExpires
-    ) {
-      return res.status(400).json({ message: "Invalid or expired OTP code" });
-    }
-
-    // 3. Hash the new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    // 4. Update password and clear the reset fields so the OTP can't be used again
-    await storage.updateUser(user.id, { 
-      password: hashedPassword, 
-      resetToken: null, 
-      resetTokenExpires: null 
-    });
-
-    res.json({ message: "Password updated successfully" });
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-
-// server/routes.ts
-
-app.post("/api/auth/resendotp", async (req, res) => {
-  try {
+  app.post("/api/auth/resendotp", otpLimiter, async (req, res) => {
     const { userId } = req.body;
     const user = await storage.getUser(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const otp = await storage.generateOTP(user.id);
+    await sendEmail(user.email, 'Your New Verification Code', 
+      `<p>Your new verification code is: <strong>${otp}</strong></p>`);
+    res.json({ message: "OTP resent" });
+  });
+
+  // --- UPDATED FORGOT PASSWORD ROUTE (Hybrid Logic) ---
+  app.post("/api/auth/forgotpassword", otpLimiter, async (req, res) => {
+    const { email } = req.body;
+    const user = await storage.getUserByemail(email);
     
-    // Sandbox Logging
-    console.log(`>>> RESENT REGISTRATION OTP FOR ${user.email}: ${otp}`);
-
-  await sendEmail(
-    user.email,
-    'Your New Verification Code',
-    `<div style="font-family: sans-serif;">
-      <p>Your new verification code is: <strong style="color: #00D4AA; font-size: 1.2em;">${otp}</strong></p>
-    </div>`
-  );
-
-  res.json({ message: "OTP resent successfully" });
-} catch (error: any) {
-  res.status(500).json({ message: error.message });
-}
-
-});
-
-app.post("/api/auth/verifyotp", async (req, res, next) => { // No hyphen
-  try {
-    const { userId, code } = req.body;
-    const success = await storage.verifyUser(userId, code);
+    // FIX: Only block if user doesn't exist OR (is Google user AND has NO password)
+    // This allows "Hybrid" users (Google + Password) to reset their password.
+    if (!user || (user.googleId && !user.password)) {
+      return res.status(404).json({ message: "User not found or uses Google login" });
+    }
     
-    if (!success) return res.status(400).json({ message: "Invalid or expired code" });
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await storage.setResetToken(user.id, otp, new Date(Date.now() + 3600000));
+    
+    await sendEmail(email, 'Reset Password', 
+      `<div style="font-family:sans-serif; padding:20px;">
+         <h2>Password Reset Request</h2>
+         <p>Use the code below to reset your password:</p>
+         <h1 style="color:#00D4AA; background:#f4f4f5; padding:10px; display:inline-block; letter-spacing: 5px;">${otp}</h1>
+         <p style="color:#666; font-size:12px; margin-top:20px;">If you didn't request this, you can safely ignore this email.</p>
+       </div>`
+    );
+    res.json({ message: "Code sent", userId: user.id });
+  });
 
+  app.post("/api/auth/resetpassword", async (req, res) => {
+    const { token, newPassword, userId } = req.body;
     const user = await storage.getUser(userId);
+    if (!user || user.resetToken !== token || new Date() > (user.resetTokenExpires || 0)) return res.status(400).json({ message: "Invalid code" });
+    
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await storage.updateUser(user.id, { password: hashedPassword, resetToken: null, resetTokenExpires: null });
+    res.json({ message: "Password updated" });
+  });
+
+  // 2. DELETE ACCOUNT: Strictly Enforces Password
+  // We keep 'requirePasswordUser' here. If a Google user tries this, 
+  // they get 400 and are told to set a password first.
+  app.delete("/api/auth/account", requireAuth, requirePasswordUser, async (req, res) => {
+    const { password } = req.body;
+    const user = (req as any).fullUser;
+
+    if (!await bcrypt.compare(password, user.password)) {
+        return res.status(400).json({ message: "Invalid password" });
+    }
+    
+    await storage.deleteUser(user.id);
+    req.logout(() => res.status(204).send());
+  });
+
+  // 3. UPDATE PASSWORD (Hybrid Logic)
+  // Removed 'requirePasswordUser' so Google users can access this to set their first password
+  app.put("/api/auth/password", requireAuth, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const userId = (req.user as any).id;
+    const user = await storage.getUser(userId);
+
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    req.login(user, (err) => {
-      if (err) return next(err);
-      res.json({ message: "Verified successfully" });
-    });
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-});
+    // Scenario A: User HAS a password (Standard Change)
+    if (user.password) {
+        if (!currentPassword) return res.status(400).json({ message: "Current password is required." });
+        
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) return res.status(400).json({ message: "Invalid current password." });
+    }
+    // Scenario B: User has NO password (Google user first-time setup) -> Skip check
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await storage.updateUser(user.id, { password: hashedPassword });
+    
+    res.status(200).json({ message: "Password updated successfully" });
+  });
+
+  // ========== CORE DATA ROUTES ==========
+
+  // Profile
+  app.get("/api/profile", requireAuth, async (req, res) => {
+    const userId = (req.user as any).id;
+    const [profile, user] = await Promise.all([storage.getUserProfile(userId), storage.getUser(userId)]);
+    res.json({ profile, user });
+  });
+
+  app.get("/api/profile/summary", requireAuth, async (req, res) => {
+    res.json(await storage.getProfileSummary((req.user as any).id));
+  });
+
+  app.post("/api/profile", requireAuth, async (req, res) => {
+    const userId = (req.user as any).id;
+    const existing = await storage.getUserProfile(userId);
+    if (existing) return res.json(await storage.updateUserProfile(userId, req.body));
+    
+    const parseResult = insertUserProfileSchema.safeParse({ ...req.body, userId });
+    if (!parseResult.success) {
+        return res.status(400).json(parseResult.error);
+    }
+    res.json(await storage.createUserProfile(parseResult.data));
+  });
+
+  app.patch("/api/profile/user", requireAuth, async (req, res) => {
+    res.json(await storage.updateUser((req.user as any).id, req.body));
+  });
+
+  // Transactions
+  app.get("/api/transactions", requireAuth, async (req, res) => {
+    res.json(await storage.getTransactions((req.user as any).id));
+  });
+
+  app.get("/api/transactions/recent", requireAuth, async (req, res) => {
+    res.json(await storage.getRecentTransactions((req.user as any).id, 10));
+  });
+
+  app.post("/api/transactions", requireAuth, async (req, res) => {
+    try {
+      const data = insertTransactionSchema.parse({ ...req.body, userId: (req.user as any).id });
+      res.json(await storage.createTransaction(data));
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.delete("/api/transactions/:id", requireAuth, async (req, res) => {
+    const success = await storage.deleteTransaction(req.params.id);
+    success ? res.status(204).send() : res.status(404).json({ message: "Not found" });
+  });
+
+  // Dashboard
+  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+    res.json(await storage.getDashboardStats((req.user as any).id, req.query.period as string));
+  });
+  
+  app.get("/api/dashboard/trend", requireAuth, async (req, res) => {
+    res.json(await storage.getWeeklySpendTrend((req.user as any).id, req.query.period as string));
+  });
+  
+  app.get("/api/dashboard/categories", requireAuth, async (req, res) => {
+    res.json(await storage.getCategoryBreakdown((req.user as any).id, req.query.period as string));
+  });
+
+  // =========================================================
+  //  GROWTH & BEHAVIORAL LOGIC 
+  // =========================================================
+
+  app.get("/api/behavioral/savings", requireAuth, async (req, res) => {
+    res.json(await storage.getBehavioralLogs((req.user as any).id));
+  });
+
+  app.post("/api/behavioral/savings", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      
+      const parseResult = insertBehavioralLogSchema.safeParse(req.body);
+      if (!parseResult.success) return res.status(400).json(parseResult.error);
+
+      const { behaviorType, estimatedAmount } = parseResult.data;
+      const amount = parseFloat(estimatedAmount as string);
+
+      const multiplier = await calculateEfficiencyMultiplier(userId);
+      let xpEarned = Math.floor((amount * 0.1 + 50) * multiplier);
+      if (xpEarned > 500) xpEarned = 500;
+
+      const canEarn = await storage.checkDailyXPCap(userId);
+      if(!canEarn) xpEarned = 0; 
+
+      const log = await storage.createBehavioralLog({
+        userId,
+        behaviorType,
+        estimatedAmount: estimatedAmount as string,
+        xpAwarded: xpEarned
+      });
+
+      const currentProfile = await storage.getUserProfile(userId);
+      const newTotalXP = (currentProfile?.rewardPoints || 0) + xpEarned;
+
+      const user = await storage.getUser(userId);
+      const newTier = calculateTier(newTotalXP, user ? user.createdAt : null);
+
+      await storage.updateUserProfile(userId, {
+        rewardPoints: newTotalXP,
+        tier: newTier
+      });
+
+      res.status(201).json({ ...log, xpEarned, newTier, totalXP: newTotalXP, multiplierApplied: multiplier });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/growth/claim-bonus", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      
+      const stats = await storage.getDashboardStats(userId, "30d");
+      const profile = await storage.getUserProfile(userId);
+      
+      if (!profile?.targetValue || Number(profile.targetValue) <= 0) {
+        return res.status(400).json({ message: "No goal set." });
+      }
+
+      const savings = Number(stats.savings);
+      const target = Number(profile.targetValue);
+      
+      if (savings < target) {
+        return res.status(400).json({ message: "Goal not met yet." });
+      }
+
+      const logs = await storage.getBehavioralLogs(userId);
+      const currentMonth = new Date().getMonth();
+      
+      const alreadyClaimed = logs.some(log => 
+        log.behaviorType === "Monthly Goal Bonus" && 
+        (log.loggedAt ? new Date(log.loggedAt).getMonth() : -1) === currentMonth
+      );
+
+      if (alreadyClaimed) {
+        return res.status(400).json({ message: "Bonus already claimed for this month." });
+      }
+
+      const bonusXP = 1000;
+      await storage.createBehavioralLog({
+        userId,
+        behaviorType: "Monthly Goal Bonus",
+        estimatedAmount: savings.toString(),
+        xpAwarded: bonusXP
+      });
+
+      const newTotalXP = (profile.rewardPoints || 0) + bonusXP;
+      const user = await storage.getUser(userId);
+      
+      const newTier = calculateTier(newTotalXP, user ? user.createdAt : null);
+
+      await storage.updateUserProfile(userId, { rewardPoints: newTotalXP, tier: newTier });
+
+      res.json({ message: "Bonus claimed!", xpEarned: bonusXP, newTier });
+
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/behavioral/summary", requireAuth, async (req, res) => {
+    res.json(await storage.getBehavioralSummary((req.user as any).id));
+  });
+
+  // Settings & Reports
+  app.get("/api/settings", requireAuth, async (req, res) => res.json(await storage.getUserSettings((req.user as any).id)));
+  app.patch("/api/settings", requireAuth, async (req, res) => res.json(await storage.updateUserSettings((req.user as any).id, req.body)));
+  app.get("/api/reports/history", requireAuth, async (req, res) => res.json(await storage.getFinancialHistory((req.user as any).id)));
+  app.get("/api/leaderboard", requireAuth, async (req, res) => res.json(await storage.getLeaderboard()));
 
   return app;
 }
-
-

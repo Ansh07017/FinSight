@@ -1,95 +1,115 @@
 // client/src/components/AuthContext.tsx
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { useLocation } from "wouter";
-// Use the optimized API wrapper
-import { profile } from "@/lib/api";
+import { createContext, ReactNode, useContext } from "react";
+import { useQuery, useMutation, useQueryClient, UseMutationResult } from "@tanstack/react-query";
+import { User, UserProfile, InsertUser } from "@shared/schema";
+import { auth, profile } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
-// 1. Define the structure based on our new high-speed summary
-interface UserProfileData {
-  firstName: string;
-  lastName: string;
-  tier: string;
-  email: string;
-}
+// Extend the DB User type to include UI-specific flags
+type AuthUser = User & {
+  hasPassword?: boolean;
+};
 
-// 2. Define the Context Type
-interface AuthContextType {
-  userProfile: UserProfileData | null;
+type AuthContextType = {
+  user: AuthUser | null;           
+  userProfile: UserProfile | null; 
   isLoading: boolean;
+  error: Error | null;
+  loginMutation: UseMutationResult<any, Error, { username: string; password: string }>;
+  logoutMutation: UseMutationResult<any, Error, void>;
+  registerMutation: UseMutationResult<any, Error, InsertUser>;
   isAuthenticated: boolean;
+  
+  // --- NEW COMPUTED PROPERTY ---
+  onboardingCompleted: boolean; 
+
+  // Helpers
   logout: () => void;
-  refreshProfile: () => Promise<void>; 
-}
+  refreshProfile: () => void;
+};
 
-interface AuthContextProps {
-  children: React.ReactNode;
-}
+const AuthContext = createContext<AuthContextType | null>(null);
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-export const AuthProvider = ({ children }: AuthContextProps) => {
-  const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [, setLocation] = useLocation();
+  // 1. Fetch User Identity
+  const { data: authData, error: authError, isLoading: authLoading } = useQuery({
+    queryKey: ["auth-me"],
+    queryFn: auth.me,
+    retry: false,
+  });
 
-  const fetchProfile = async () => {
-    // We only show global loader if we don't have a profile yet
-    if (!userProfile) setIsLoading(true);
-    
-    try {
-      // OPTIMIZATION: Use the granular summary endpoint instead of the full profile
-      const data = await profile.getSummary();
-      
-      setUserProfile({
-        firstName: data.firstName || data.email,
-        lastName: data.lastName || "",
-        tier: data.tier || "Bronze Tier Member",
-        email: data.email
-      });
-      setIsAuthenticated(true);
-    } catch (error: any) {
-      console.error("Auth check failed:", error);
-      setIsAuthenticated(false);
-      setUserProfile(null);
-      
-      // Redirect to auth only if not already there
-      if (window.location.pathname !== "/auth") {
-        setLocation("/auth");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // 2. Fetch User Profile
+  const { data: profileData, isLoading: profileLoading } = useQuery({
+    queryKey: ["profile-context"],
+    queryFn: profile.get,
+    enabled: !!authData?.user,
+  });
 
-  const logout = () => {
-    setIsAuthenticated(false);
-    setUserProfile(null);
-    setLocation("/auth");
-  };
+  const user = authData?.user ?? null;
+  const userProfile = profileData?.profile ?? null;
+  
+  // LOGIC: If a profile exists and has a userType, onboarding is done.
+  const onboardingCompleted = !!userProfile?.userType;
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  const isLoading = authLoading || (!!user && profileLoading);
+
+  const loginMutation = useMutation({
+    mutationFn: (c: { username: string; password: string }) => auth.login(c.username, c.password),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["auth-me"], { user: data.user });
+      queryClient.invalidateQueries({ queryKey: ["profile-context"] });
+      toast({ title: "Welcome back!" });
+    },
+    onError: (e) => toast({ variant: "destructive", title: "Login Failed", description: e.message }),
+  });
+
+  const registerMutation = useMutation({
+    mutationFn: (c: InsertUser) => auth.register(c.email, c.password!),
+    onSuccess: () => toast({ title: "Account Created", description: "Please verify your email." }),
+    onError: (e) => toast({ variant: "destructive", title: "Registration Failed", description: e.message }),
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: auth.logout,
+    onSuccess: () => {
+      queryClient.setQueryData(["auth-me"], null);
+      queryClient.setQueryData(["profile-context"], null);
+      queryClient.clear();
+      toast({ title: "Logged out successfully" });
+    },
+    onError: (e) => toast({ variant: "destructive", title: "Logout Failed", description: e.message }),
+  });
 
   return (
-    <AuthContext.Provider value={{ 
-      userProfile, 
-      isLoading, 
-      isAuthenticated, 
-      logout,
-      refreshProfile: fetchProfile 
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        userProfile,
+        isLoading,
+        error: authError as Error,
+        loginMutation,
+        logoutMutation,
+        registerMutation,
+        isAuthenticated: !!user,
+        
+        // EXPOSED HERE
+        onboardingCompleted, 
+
+        logout: () => logoutMutation.mutate(),
+        refreshProfile: () => queryClient.invalidateQueries({ queryKey: ["profile-context"] }),
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
-};
+}

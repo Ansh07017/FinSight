@@ -5,11 +5,7 @@ import path from "path";
 import { metaImagesPlugin } from "./vite-plugin-meta-images.ts";
 
 export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-    metaImagesPlugin(),
-  ],
+  plugins: [react(), tailwindcss(), metaImagesPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
@@ -17,23 +13,28 @@ export default defineConfig({
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
   },
-  css: {
-    postcss: {
-      plugins: [],
-    },
-  },
   root: path.resolve(import.meta.dirname, "client"),
   build: {
-    // This tells Vite: "Go to the project root, then into dist/public"
     outDir: path.resolve(import.meta.dirname, "dist", "public"),
     emptyOutDir: true,
+    target: "esnext", // Modern JS = Smaller & Faster code
+    reportCompressedSize: false, // Speeds up the build process
+    rollupOptions: {
+      output: {
+        // CODE SPLITTING: Prevents "Heavy" modules from slowing down initial load
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("recharts")) return "charts";
+            if (id.includes("lucide-react")) return "icons";
+            if (id.includes("framer-motion")) return "animations";
+            return "vendor";
+          }
+        },
+      },
+    },
   },
   server: {
-    // Standard host configuration for local development
     host: "0.0.0.0",
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
-    },
+    fs: { strict: true, deny: ["**/.*"] },
   },
 });

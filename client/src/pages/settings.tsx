@@ -1,437 +1,427 @@
-// client/src/pages/SettingsPage.tsx
+// client/src/pages/settings.tsx
 
-import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
-import { useQuery, useMutation, useQueryClient, MutationFunction } from "@tanstack/react-query";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { 
+  Loader2, Bell, Shield, User as UserIcon, LogOut, 
+  Trash2, Lock, Smartphone, Globe, Target, Mail, Phone, Smartphone as MobileIcon 
+} from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge"; 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, Shield, User, Smartphone, LogOut, Loader2, Target, Globe } from "lucide-react";
-// Updated to use granular API functions
-import { profile, settings, auth } from "@/lib/api";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
-interface ChangePasswordData {
-    currentPassword: string;
-    newPassword: string;
-}
+import { auth, settings, profile } from "@/lib/api";
+import { useAuth } from "@/components/AuthContext";
 
-interface GoalUpdateData { 
-    goalType: 'monthly_amount' | 'percentage_income';
-    targetValue: string;
-}
+// --- VALIDATION SCHEMAS ---
+const passwordSchema = z.object({
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(8, "Must be at least 8 characters"),
+  confirmPassword: z.string().min(8, "Must be at least 8 characters"),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
 
-// --- HELPER FUNCTIONS ---
-
+// Helper for Avatar
 const getAvatarUrl = (userData: any): string => {
-    const firstName = userData?.firstName;
-    const email = userData?.email; 
-    const seed = firstName || email || 'Default';
-    
-    if (seed === 'Default') {
-        return 'https://github.com/shadcn.png'; 
-    }
-    return `https://api.dicebear.com/8.x/initials/svg?seed=${seed}&radius=50&chars=1`;
+    const seed = userData?.firstName || userData?.email || 'Default';
+    return `https://api.dicebear.com/9.x/initials/svg?seed=${seed}&radius=50&backgroundColor=00d4aa`;
 };
 
-// Currency Symbol Helper (Consistent with other pages)
-const getCurrencySymbol = (currencyCode: string | undefined) => {
-    switch (currencyCode) {
-        case 'USD': return '$';
-        case 'EUR': return '€';
-        case 'GBP': return '£';
-        default: return '₹';
-    }
+const getCurrencySymbol = (code?: string) => {
+    const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', INR: '₹' };
+    return symbols[code || 'INR'] || '₹';
 };
-
-const changePasswordWrapper: MutationFunction<void, ChangePasswordData> = async (variables) => {
-    await auth.changePassword(variables.currentPassword, variables.newPassword);
-}
-
-const deleteAccountWrapper: MutationFunction<void, string> = async (password) => {
-    await auth.deleteAccount(password);
-}
-
 
 export default function SettingsPage() {
-  const [, setLocation] = useLocation();
+  const { user, logout } = useAuth(); 
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
-  // --- Profile Form State ---
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [goalType, setGoalType] = useState<"monthly_amount" | "percentage_income">("monthly_amount");
+  const [targetValue, setTargetValue] = useState("");
 
-  // --- Financial Goal State ---
-  const [goalType, setGoalType] = useState<GoalUpdateData['goalType']>("monthly_amount"); 
-  const [targetValue, setTargetValue] = useState(""); 
-    
-  // --- Change Password State ---
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
-  
-  
-  // --- Delete Account State ---
-  const [confirmDeletePassword, setConfirmDeletePassword] = useState("");
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  
-  // --- Toggles State ---
-  const [notifications, setNotifications] = useState({
-    expense: false,
-    weekly: false,
-    rewards: false,
-    biometric: false
+  // 1. FETCH DATA
+  const { data: userSettings, isLoading: settingsLoading } = useQuery({
+    queryKey: ["settings"],
+    queryFn: settings.get,
   });
 
-  // --- 1. MODULAR QUERIES (Parallel Loading) ---
   const { data: profileResponse, isLoading: profileLoading } = useQuery({
     queryKey: ["profile-full"],
     queryFn: profile.get,
   });
 
-  const { data: settingsData, isLoading: settingsLoading } = useQuery({
-    queryKey: ["settings"],
-    queryFn: settings.get,
-  });
+  // Sync state when data loads
+  if (profileResponse?.user && !firstName) {
+      setFirstName(profileResponse.user.firstName || "");
+      setLastName(profileResponse.user.lastName || "");
+      setEmail(profileResponse.user.email || "");
+      setPhone(profileResponse.user.phone || "");
+  }
+  if (profileResponse?.profile && !targetValue) {
+      setGoalType(profileResponse.profile.goalType || "monthly_amount");
+      setTargetValue(profileResponse.profile.targetValue || "");
+  }
 
-  const currencySymbol = getCurrencySymbol(settingsData?.currency);
-
-  // --- 2. LOGIC PRESERVATION: Effects to Load Data ---
-  useEffect(() => {
-    if (profileResponse?.user) {
-        const user = profileResponse.user;
-        setFirstName(user.firstName || "");
-        setLastName(user.lastName || "");
-        setEmail(user.email || "");
-        setPhone(user.phone || "");
-    }
-    if (profileResponse?.profile) {
-        setGoalType(profileResponse.profile.goalType || "monthly_amount");
-        setTargetValue(profileResponse.profile.targetValue || "");
-    }
-  }, [profileResponse]);
-
-  useEffect(() => {
-    if (settingsData) {
-      setNotifications({
-        expense: settingsData.expenseAlerts || false,
-        weekly: settingsData.weeklyReport || false,
-        rewards: settingsData.rewardUpdates || false,
-        biometric: settingsData.biometricLogin || false,
-      });
-    }
-  }, [settingsData]);
-
-  // --- 3. MUTATIONS (Preserved Functionality) ---
-  
-  const updateProfileMutation = useMutation({
-    mutationFn: profile.updateUser,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["profile-full"] });
-      queryClient.invalidateQueries({ queryKey: ["profile-summary"] });
-      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/profile/financial"] });
-      queryClient.invalidateQueries({ queryKey: ["auth-me"] });
-
-      toast({ title: "Profile Updated", description: "Personal details saved successfully." });
-    },
-    onError: (error: Error) => {
-      toast({ variant: "destructive", title: "Failed to update profile", description: error.message });
-    },
-  });
-
+  // 2. MUTATIONS
   const updateSettingsMutation = useMutation({
     mutationFn: settings.update,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
-      toast({ title: "Settings Updated", description: "Your preferences have been saved." });
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: "Error", description: e.message })
+  });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: profile.updateUser,
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["profile-full"] });
+        toast({ title: "Saved", description: "Profile updated successfully." });
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: "Error", description: e.message })
+  });
+
+  const updateGoalMutation = useMutation({
+    mutationFn: (data: any) => profile.create(data),
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["profile-full"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        toast({ title: "Goal Set", description: "Your savings target is updated." });
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: "Error", description: e.message })
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: (data: z.infer<typeof passwordSchema>) => 
+      auth.changePassword(data.currentPassword || "", data.newPassword),
+    onSuccess: () => {
+      toast({ title: "Success", description: "Password updated successfully." });
+      passwordForm.reset();
+      window.location.reload(); 
     },
     onError: (error: Error) => {
-      toast({ variant: "destructive", title: "Failed to update settings", description: error.message });
+      toast({ variant: "destructive", title: "Error", description: error.message });
     },
   });
-  
-  const changePasswordMutation = useMutation<void, Error, ChangePasswordData>({
-    mutationFn: changePasswordWrapper, 
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: auth.deleteAccount,
     onSuccess: () => {
-        setCurrentPassword("");
-        setNewPassword("");
-        setIsPasswordDialogOpen(false); 
-        toast({ title: "Password Updated", description: "Password changed successfully." });
+      logout();
+      window.location.href = "/auth";
     },
-    onError: (error: any) => {
-        toast({ variant: "destructive", title: "Change Failed", description: error.message || "Invalid current password." });
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Deletion Failed", description: error.message });
     },
   });
 
-  const deleteAccountMutation = useMutation<void, Error, string>({
-    mutationFn: deleteAccountWrapper,
-    onSuccess: () => {
-        setIsDeleteDialogOpen(false); 
-        toast({ variant: "destructive", title: "Account Deleted", description: "Your account has been removed." });
-        setLocation("/auth"); 
-    },
-    onError: (error: any) => {
-        toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Incorrect password." });
-    },
+  // 3. FORMS & HANDLERS
+  const passwordForm = useForm<z.infer<typeof passwordSchema>>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
   });
 
-  const updateGoalMutation = useMutation<any, Error, GoalUpdateData>({
-      mutationFn: (data) => profile.create(data), 
-      onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ["profile-full"] });
-          toast({ title: "Goal Updated", description: "Your monthly savings goal has been set." });
-      },
-      onError: (error: Error) => {
-          toast({ variant: "destructive", title: "Goal Update Failed", description: error.message });
-      },
-  });
-
-  // --- HANDLERS ---
+  const handleSaveProfile = () => updateProfileMutation.mutate({ firstName, lastName, email, phone });
   
-  const handleSaveProfile = () => {
-    updateProfileMutation.mutate({ firstName, lastName, email, phone });
-  };
-    
   const handleSaveGoal = () => {
-    if (!targetValue || isNaN(Number(targetValue)) || Number(targetValue) <= 0) {
-        toast({ variant: "destructive", title: "Invalid Target", description: "Enter a positive number." });
-        return;
-    }
+    if (!targetValue || isNaN(Number(targetValue))) return toast({ variant: "destructive", title: "Invalid Goal" });
     updateGoalMutation.mutate({ goalType, targetValue });
   };
 
-  const handleToggleSetting = (key: string, value: boolean) => {
-    const settingsMap: Record<string, string> = {
-      expense: "expenseAlerts", weekly: "weeklyReport", rewards: "rewardUpdates", biometric: "biometricLogin",
-    };
-    updateSettingsMutation.mutate({ [settingsMap[key]]: value });
-  };
+  const currencySymbol = getCurrencySymbol(userSettings?.currency);
+  const hasPassword = user?.hasPassword;
 
-  const handleChangePassword = () => {
-    if (!currentPassword || !newPassword) return;
-    if (currentPassword === newPassword) {
-        toast({ variant: "destructive", title: "Invalid Password", description: "New password must be different." });
-        return;
-    }
-    changePasswordMutation.mutate({ currentPassword, newPassword });
-  };
-  
-  const handleConfirmDelete = () => {
-    if (!confirmDeletePassword) return;
-    deleteAccountMutation.mutate(confirmDeletePassword);
-  };
-  
-  const handleLogout = async () => {
-    try {
-        await auth.logout();
-        setLocation("/auth");
-    } catch (e) {
-        setLocation("/auth");
-    }
-  };
-
-  const handleCurrencyChange = (val: string) => {
-    updateSettingsMutation.mutate({ currency: val });
-  }
-
-  if (profileLoading || settingsLoading) {
-      return (
-          <div className="flex items-center justify-center h-screen">
-              <Loader2 className="w-10 h-10 animate-spin text-[#00D4AA]" />
-          </div>
-      );
-  }
+  if (settingsLoading || profileLoading) return <div className="flex justify-center h-[80vh] items-center"><Loader2 className="animate-spin text-[#00D4AA] w-10 h-10" /></div>;
 
   return (
-      <div className="space-y-8 max-w-4xl mx-auto pb-10">
+    <div className="space-y-8 pb-10 max-w-6xl mx-auto">
+      
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/40 pb-6">
         <div>
-          <h1 className="text-3xl font-bold text-white">Settings</h1>
-          <p className="text-muted-foreground">Manage your account preferences and app settings</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Settings</h1>
+          <p className="text-muted-foreground">Manage your account and preferences.</p>
         </div>
+        <Button variant="ghost" className="text-red-400 hover:text-red-500 hover:bg-red-500/10 gap-2" onClick={() => { auth.logout(); window.location.href="/auth"; }}>
+            <LogOut className="w-4 h-4" /> Sign Out
+        </Button>
+      </div>
 
-        {/* Profile Information */}
-        <Card className="bg-card border-border/50">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
-              Profile Information
-            </CardTitle>
-            <CardDescription>Update your personal details</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center gap-6">
-              <Avatar className="w-20 h-20 border-2 border-primary/20">
-                <AvatarImage src={getAvatarUrl(profileResponse?.user)} /> 
-                <AvatarFallback>
-                    {profileResponse?.user?.firstName?.charAt(0) || ''}
-                    {profileResponse?.user?.lastName?.charAt(0) || ''}
-                </AvatarFallback>
-              </Avatar>
-              <div className="space-y-1">
-                  <p className="text-xl font-bold text-white">
-                      {profileResponse?.user?.firstName} {profileResponse?.user?.lastName}
-                  </p>
-                  <p className="text-sm text-muted-foreground">@{profileResponse?.user?.email}</p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>First Name</Label>
-                <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} className="bg-secondary/50 border-border" />
-              </div>
-              <div className="space-y-2">
-                <Label>Last Name</Label>
-                <Input value={lastName} onChange={(e) => setLastName(e.target.value)} className="bg-secondary/50 border-border" />
-              </div>
-              <div className="space-y-2">
-                <Label>Email Address</Label>
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} className="bg-secondary/50 border-border" />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone Number</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="bg-secondary/50 border-border" />
-              </div>
-            </div>
-            <Button onClick={handleSaveProfile} className="bg-primary text-black hover:bg-primary/90 font-bold" disabled={updateProfileMutation.isPending}>
-              {updateProfileMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : "Save Changes"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Financial Goal Setting Card - UPDATED: Dynamic Currency */}
-        <Card className="bg-card border-border/50">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        {/* LEFT COLUMN: IDENTITY & GOALS */}
+        <div className="space-y-8">
+          
+          {/* Profile Card */}
+          <Card className="bg-card border-border/50 shadow-lg">
             <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                    <Target className="w-5 h-5 text-accent" />
-                    Monthly Savings Goal
-                </CardTitle>
-                <CardDescription>Define your monthly savings commitment for rewards and tier progression.</CardDescription>
+              <CardTitle className="flex items-center gap-2 text-white">
+                <UserIcon className="w-5 h-5 text-[#00D4AA]" /> Personal Profile
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-                <div className="space-y-2">
-                    <Label>Goal Type</Label>
-                    <Tabs value={goalType} onValueChange={(value) => setGoalType(value as GoalUpdateData['goalType'])} className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 bg-secondary/50 border-border">
-                            <TabsTrigger value="monthly_amount">Fixed Amount ({currencySymbol})</TabsTrigger>
-                            <TabsTrigger value="percentage_income">Percentage (%)</TabsTrigger>
-                        </TabsList>
-                    </Tabs>
+               <div className="flex items-center gap-5 p-4 bg-secondary/20 rounded-xl border border-border/50">
+                    <Avatar className="w-16 h-16 border-2 border-[#00D4AA]/20">
+                        <AvatarImage src={getAvatarUrl(profileResponse?.user)} />
+                        <AvatarFallback>User</AvatarFallback>
+                    </Avatar>
+                    <div>
+                        <p className="text-lg font-bold text-white">
+                            {firstName || "User"} {lastName}
+                        </p>
+                        <p className="text-sm text-muted-foreground break-all">{email}</p>
+                    </div>
                 </div>
 
-                <div className="space-y-2">
-                    <Label htmlFor="target-value">
-                        {goalType === "monthly_amount" ? `Target Savings Amount (${currencySymbol})` : "Target Percentage (%)"}
-                    </Label>
-                    <Input id="target-value" type="number" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="bg-secondary/50 border-border" placeholder={goalType === "monthly_amount" ? "e.g., 5000" : "e.g., 15"} />
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label>First Name</Label>
+                        <Input value={firstName} onChange={e => setFirstName(e.target.value)} className="bg-secondary/50 border-border" />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Last Name</Label>
+                        <Input value={lastName} onChange={e => setLastName(e.target.value)} className="bg-secondary/50 border-border" />
+                    </div>
                 </div>
                 
-                <p className="text-xs text-muted-foreground pt-2">Determines your Monthly Savings Status and Tier Progression.</p>
+                <div className="space-y-2">
+                    <Label className="flex items-center gap-2"><Mail className="w-3 h-3" /> Email</Label>
+                    <Input value={email} onChange={e => setEmail(e.target.value)} className="bg-secondary/50 border-border" />
+                </div>
                 
-                <Button onClick={handleSaveGoal} className="bg-accent text-black hover:bg-accent/90 font-bold" disabled={updateGoalMutation.isPending || !targetValue}>
-                    {updateGoalMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving Goal...</> : "Set Goal"}
+                <div className="space-y-2">
+                    <Label className="flex items-center gap-2"><Phone className="w-3 h-3" /> Phone</Label>
+                    <Input value={phone} onChange={e => setPhone(e.target.value)} className="bg-secondary/50 border-border" />
+                </div>
+
+                <Button onClick={handleSaveProfile} className="w-full bg-[#00D4AA] text-black hover:bg-[#00D4AA]/90 font-bold" disabled={updateProfileMutation.isPending}>
+                    {updateProfileMutation.isPending ? <Loader2 className="animate-spin w-4 h-4" /> : "Save Profile"}
                 </Button>
             </CardContent>
-        </Card>
-
-        {/* Preferences */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="bg-card border-border/50">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Bell className="w-5 h-5 text-accent" /> Notifications
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5"><Label className="text-base">Expense Alerts</Label><p className="text-xs text-muted-foreground">Exceed budget alerts</p></div>
-                <Switch checked={notifications.expense} onCheckedChange={(c) => handleToggleSetting('expense', c)} disabled={updateSettingsMutation.isPending} />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5"><Label className="text-base">Weekly Report</Label><p className="text-xs text-muted-foreground">Spending summary</p></div>
-                <Switch checked={notifications.weekly} onCheckedChange={(c) => handleToggleSetting('weekly', c)} disabled={updateSettingsMutation.isPending} />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5"><Label className="text-base">Reward Updates</Label><p className="text-xs text-muted-foreground">Earned point updates</p></div>
-                <Switch checked={notifications.rewards} onCheckedChange={(c) => handleToggleSetting('rewards', c)} disabled={updateSettingsMutation.isPending} />
-              </div>
-            </CardContent>
           </Card>
 
-          <Card className="bg-card border-border/50">
+          {/* Goal Card */}
+          <Card className="bg-card border-border/50 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-blue-400" /> App Settings
-              </CardTitle>
+                <CardTitle className="flex items-center gap-2 text-white">
+                    <Target className="w-5 h-5 text-blue-500" /> Savings Goal
+                </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5"><Label className="text-base">Dark Mode</Label><p className="text-xs text-muted-foreground">Application theme</p></div>
-                <Switch defaultChecked disabled />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5"><Label className="text-base">Biometric Login</Label><p className="text-xs text-muted-foreground">Use FaceID/TouchID</p></div>
-                <Switch checked={notifications.biometric} onCheckedChange={(c) => handleToggleSetting('biometric', c)} disabled={updateSettingsMutation.isPending} />
-              </div>
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center gap-2 mb-2"><Globe className="w-4 h-4 text-muted-foreground" /><Label className="text-base">Currency Display</Label></div>
-                <Select onValueChange={handleCurrencyChange} defaultValue={settingsData?.currency || "INR"}>
-                    <SelectTrigger className="bg-secondary/50 border-border"><SelectValue placeholder="Select Currency" /></SelectTrigger>
-                    <SelectContent className="bg-card border-border text-white">
-                        <SelectItem value="INR">INR (₹)</SelectItem><SelectItem value="USD">USD ($)</SelectItem><SelectItem value="EUR">EUR (€)</SelectItem><SelectItem value="GBP">GBP (£)</SelectItem>
-                    </SelectContent>
-                </Select>
-              </div>
+            <CardContent className="space-y-6">
+                <Tabs value={goalType} onValueChange={(v) => setGoalType(v as any)} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 bg-secondary/50 border border-border/50">
+                        <TabsTrigger value="monthly_amount">Fixed Amount</TabsTrigger>
+                        <TabsTrigger value="percentage_income">% of Income</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+                
+                <div className="space-y-2">
+                    <Label className="text-xs uppercase font-bold tracking-widest text-muted-foreground">
+                        Target {goalType === 'monthly_amount' ? `Value (${currencySymbol})` : 'Percentage (%)'}
+                    </Label>
+                    <div className="relative">
+                        <Input 
+                            type="number" 
+                            value={targetValue} 
+                            onChange={e => setTargetValue(e.target.value)} 
+                            className="bg-secondary/50 border-border pl-10 text-lg font-mono" 
+                            placeholder={goalType === "monthly_amount" ? "5000" : "20"} 
+                        />
+                        <div className="absolute left-3 top-2.5 text-muted-foreground font-bold">
+                            {goalType === 'monthly_amount' ? currencySymbol : '%'}
+                        </div>
+                    </div>
+                </div>
+
+                <Button onClick={handleSaveGoal} variant="outline" className="w-full border-blue-500/30 hover:bg-blue-500/10 text-blue-400" disabled={updateGoalMutation.isPending}>
+                    {updateGoalMutation.isPending ? "Updating..." : "Update Goal"}
+                </Button>
             </CardContent>
           </Card>
         </div>
 
-        {/* Security & Danger Zone (Fully Preserved) */}
-        <Card className="bg-card border-border/50">
-          <CardHeader><CardTitle className="text-white flex items-center gap-2"><Shield className="w-5 h-5 text-red-400" /> Security & Danger Zone</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg bg-secondary/20">
-              <div><p className="font-medium text-white">Change Password</p><p className="text-sm text-muted-foreground">Update password</p></div>
-              <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
-                <DialogTrigger asChild><Button variant="outline" className="border-border hover:bg-white/5" disabled={changePasswordMutation.isPending}>Update</Button></DialogTrigger>
-                <DialogContent className="bg-card border-border text-white">
-                  <DialogHeader><DialogTitle>Change Password</DialogTitle></DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2"><Label>Current Password</Label><Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="bg-secondary border-border" /></div>
-                    <div className="space-y-2"><Label>New Password</Label><Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="bg-secondary border-border" /></div>
+        {/* RIGHT COLUMN: PREFERENCES & SECURITY */}
+        <div className="space-y-8">
+          
+          {/* Preferences Card */}
+          <Card className="bg-card border-border/50 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg text-white">
+                <Smartphone className="w-5 h-5 text-purple-500" /> Preferences
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Currency */}
+              <div className="space-y-3 pb-4 border-b border-border/30">
+                  <Label className="flex items-center gap-2"><Globe className="w-4 h-4" /> Currency Unit</Label>
+                  <Select onValueChange={(v) => updateSettingsMutation.mutate({ currency: v })} defaultValue={userSettings?.currency || "INR"}>
+                      <SelectTrigger className="bg-secondary/50 border-border">
+                          <SelectValue placeholder="Select Currency" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-card border-border text-white">
+                          <SelectItem value="INR">INR (₹)</SelectItem>
+                          <SelectItem value="USD">USD ($)</SelectItem>
+                          <SelectItem value="EUR">EUR (€)</SelectItem>
+                          <SelectItem value="GBP">GBP (£)</SelectItem>
+                      </SelectContent>
+                  </Select>
+              </div>
+
+              {/* Toggles */}
+              <div className="space-y-5">
+                  {/* EXPENSE ALERTS (COMING SOON) */}
+                  <div className="flex items-center justify-between opacity-60">
+                      <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                             <Label className="text-base flex items-center gap-2"><Bell className="w-4 h-4" /> Expense Alerts</Label>
+                             <Badge variant="outline" className="text-[10px] h-5 border-yellow-500/50 text-yellow-500 gap-1 px-1.5">
+                                Coming Soon
+                             </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Smart notifications for budget limits</p>
+                      </div>
+                      <Switch checked={false} disabled={true} />
                   </div>
-                  <DialogFooter><Button onClick={handleChangePassword} className="bg-primary text-black font-bold" disabled={changePasswordMutation.isPending}>{changePasswordMutation.isPending ? "Updating..." : "Update Password"}</Button></DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-            
-            <div className="flex items-center justify-between p-4 border border-red-900/30 rounded-lg bg-red-900/10">
-              <div><p className="font-medium text-red-400">Delete Account</p><p className="text-sm text-red-400/70">Remove data</p></div>
-              <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <DialogTrigger asChild><Button variant="destructive" className="bg-red-600 font-bold" disabled={deleteAccountMutation.isPending}>Delete</Button></DialogTrigger>
-                <DialogContent className="bg-card border-border text-white">
-                  <DialogHeader><DialogTitle>Confirm Delete?</DialogTitle></DialogHeader>
-                  <div className="space-y-2 py-4"><Label>Enter Password</Label><Input type="password" value={confirmDeletePassword} onChange={(e) => setConfirmDeletePassword(e.target.value)} className="bg-secondary border-border" /></div>
-                  <DialogFooter><Button variant="destructive" onClick={handleConfirmDelete} disabled={deleteAccountMutation.isPending} className="font-bold">{deleteAccountMutation.isPending ? "Deleting..." : "Confirm Delete"}</Button></DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <div className="flex justify-center pt-4">
-          <Button variant="ghost" className="text-muted-foreground hover:text-destructive gap-2 hover:bg-destructive/10" onClick={handleLogout}><LogOut className="w-4 h-4" /> Log Out</Button>
+                  
+                  {/* WEEKLY REPORT REMOVED (Redundant) */}
+
+                  {/* BIOMETRIC LOGIN (APP ONLY) */}
+                  <div className="flex items-center justify-between opacity-60">
+                      <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                             <Label className="text-base flex items-center gap-2"><Shield className="w-4 h-4" /> Biometric Login</Label>
+                             <Badge variant="outline" className="text-[10px] h-5 border-blue-500/50 text-blue-400 gap-1 px-1.5">
+                                <MobileIcon className="w-3 h-3" /> App Only
+                             </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Enable FaceID/TouchID</p>
+                      </div>
+                      <Switch checked={false} disabled={true} />
+                  </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Security Card (Password & Deletion) */}
+          <Card className="bg-card border-border/50 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg text-white">
+                <Shield className="w-5 h-5 text-yellow-500" /> 
+                {hasPassword ? "Change Password" : "Create Password"}
+              </CardTitle>
+              <CardDescription>
+                {hasPassword 
+                  ? "Update your existing password." 
+                  : "Create a password to enable account deletion."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={passwordForm.handleSubmit((d) => changePasswordMutation.mutate(d))} className="space-y-4">
+                
+                {hasPassword && (
+                  <div className="space-y-2">
+                    <Label>Current Password</Label>
+                    <Input type="password" {...passwordForm.register("currentPassword")} className="bg-secondary/20 border-border" />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>New Password</Label>
+                  <Input type="password" {...passwordForm.register("newPassword")} className="bg-secondary/20 border-border" />
+                  {passwordForm.formState.errors.newPassword && <p className="text-xs text-red-400">{passwordForm.formState.errors.newPassword.message}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Confirm Password</Label>
+                  <Input type="password" {...passwordForm.register("confirmPassword")} className="bg-secondary/20 border-border" />
+                  {passwordForm.formState.errors.confirmPassword && <p className="text-xs text-red-400">{passwordForm.formState.errors.confirmPassword.message}</p>}
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <Button type="submit" disabled={changePasswordMutation.isPending} className="bg-primary text-black font-bold">
+                    {changePasswordMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {hasPassword ? "Update Password" : "Create Password"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Danger Zone */}
+          <Card className="border-red-900/30 bg-red-950/10">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg text-red-500">
+                <Trash2 className="w-5 h-5" /> Delete Account
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!hasPassword ? (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 text-sm">
+                  <Lock className="w-8 h-8 opacity-80" />
+                  <div>
+                    <p className="font-bold">Deletion Locked</p>
+                    <p className="text-xs opacity-80">You must create a password above before you can delete your account.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-muted-foreground">Permanently remove your data.</p>
+                  <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="destructive">Delete Account</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Are you absolutely sure?</DialogTitle>
+                        <DialogDescription>This will permanently delete your account data.</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <Label>Enter your password to confirm</Label>
+                        <Input type="password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} />
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+                        <Button variant="destructive" onClick={() => deleteAccountMutation.mutate(deletePassword)} disabled={!deletePassword || deleteAccountMutation.isPending}>
+                          {deleteAccountMutation.isPending ? "Deleting..." : "Confirm Deletion"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
         </div>
       </div>
+    </div>
   );
 }
