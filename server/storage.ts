@@ -10,37 +10,41 @@ import {
 } from "@shared/schema";
 import { eq, desc, and, gte, lt, sql, sum } from "drizzle-orm";
 
-// 👇 USING NEW DRIVER (postgres-js)
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import * as dotenv from "dotenv";
-
-dotenv.config();
 
 if (!process.env.PG_CONNECTION_STRING) {
   throw new Error("PG_CONNECTION_STRING must be set in environment variables");
 }
 
-// 🔍 DEBUG
 console.log("------------------------------------------------");
 console.log("🔌 DATABASE CONNECTING...");
 console.log("👉 MODE: Postgres-JS");
 console.log("------------------------------------------------");
 
 const client = postgres(process.env.PG_CONNECTION_STRING, {
-  // ✅ FIX: This tells the driver "Use SSL, but don't crash on self-signed certs"
   ssl: { rejectUnauthorized: false }, 
-  
-  // ✅ FIX: This tells Render/Supabase "Don't cache query plans" (Prevents Failed Query error)
   prepare: false,     
-  
   max: 3,             
   idle_timeout: 20,   
 });
 
+(async () => {
+  try {
+    console.log("🔍 Testing DB connection...");
+    await client`select 1`;
+    console.log("✅ DB connection successful");
+  } catch (err) {
+    console.error("❌ DB connection failed");
+    console.error(err);
+    process.exit(1);
+  }
+})();
+
 export const db = drizzle(client, { 
   schema: { users, userSettings, userProfiles, transactions, behavioralSavings } 
 });
+
 
 // --- INTERFACE DEFINITION ---
 export interface IStorage {
