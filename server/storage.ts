@@ -9,43 +9,42 @@ import {
   type BehavioralLog, type InsertBehavioralLog
 } from "@shared/schema";
 import { eq, desc, and, gte, lt, sql, sum } from "drizzle-orm";
-
-// --- DB CONNECTION SETUP (Integrated) ---
-import { drizzle } from "drizzle-orm/node-postgres";
-import pkg from "pg";
+// 👇 CHANGE 1: Use the 'postgres-js' adapter (supports blocking prepared statements)
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import * as dotenv from "dotenv";
-import { any } from "zod";
 
 dotenv.config();
-const { Pool } = pkg;
 
 if (!process.env.PG_CONNECTION_STRING) {
   throw new Error("PG_CONNECTION_STRING must be set in environment variables");
 }
 
-// 🔍 ADD THIS DEBUG BLOCK 🔍
+// 🔍 DEBUG BLOCK (Optional, keeps your logs clear) 🔍
 const debugUrl = new URL(process.env.PG_CONNECTION_STRING);
 console.log("------------------------------------------------");
 console.log("🔌 DATABASE CONNECTION DEBUG INFO:");
 console.log("👉 HOST:", debugUrl.hostname);
-console.log("👉 PORT:", debugUrl.port); // <--- This MUST say 5432
+console.log("👉 PORT:", debugUrl.port); 
 console.log("👉 PROTOCOL:", debugUrl.protocol);
-console.log("👉 PARAMS:", debugUrl.search); // <--- Look for 'pgbouncer=true' here
 console.log("------------------------------------------------");
 
-const pool = new Pool({
-  connectionString: process.env.PG_CONNECTION_STRING,
-  ssl: {
-    rejectUnauthorized: false 
-  },
-  max: 3,                   
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+// 👇 CHANGE 2: Create the client with 'prepare: false'
+const client = postgres(process.env.PG_CONNECTION_STRING, {
+  ssl: 'require',     // Required for Render/Supabase
+  max: 3,             // Limit connections to prevent exhaustion
+  idle_timeout: 20,   // Close idle connections fast to free up slots
+  
+  // 🚨 THE CRITICAL FIX 🚨
+  // Supabase's transaction pooler (Supavisor) does not support prepared statements.
+  // This flag tells the driver to strictly use simple queries.
+  prepare: false,     
 });
 
-export const db = drizzle(pool, { schema: { 
-  users, userSettings, userProfiles, transactions, behavioralSavings 
-}});
+// 👇 CHANGE 3: Initialize Drizzle with the new client
+export const db = drizzle(client, { 
+  schema: { users, userSettings, userProfiles, transactions, behavioralSavings } 
+});
 
 // --- INTERFACE DEFINITION ---
 export interface IStorage {
@@ -347,7 +346,7 @@ export class DatabaseStorage implements IStorage {
     `);
 
     // Explicitly type 'row' as any
-    const monthlyData = results.rows.map((row: any) => ({
+    const monthlyData = results.map((row: any) => ({
       month: row.label,
       income: Number(row.income),
       expense: Number(row.expense),
