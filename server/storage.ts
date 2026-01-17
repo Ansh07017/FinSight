@@ -9,7 +9,8 @@ import {
   type BehavioralLog, type InsertBehavioralLog
 } from "@shared/schema";
 import { eq, desc, and, gte, lt, sql, sum } from "drizzle-orm";
-// 👇 CHANGE 1: Use the 'postgres-js' adapter (supports blocking prepared statements)
+
+// 👇 USING NEW DRIVER (postgres-js)
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as dotenv from "dotenv";
@@ -20,35 +21,29 @@ if (!process.env.PG_CONNECTION_STRING) {
   throw new Error("PG_CONNECTION_STRING must be set in environment variables");
 }
 
-// 🔍 DEBUG BLOCK (Optional, keeps your logs clear) 🔍
-const debugUrl = new URL(process.env.PG_CONNECTION_STRING);
+// 🔍 DEBUG
 console.log("------------------------------------------------");
-console.log("🔌 DATABASE CONNECTION DEBUG INFO:");
-console.log("👉 HOST:", debugUrl.hostname);
-console.log("👉 PORT:", debugUrl.port); 
-console.log("👉 PROTOCOL:", debugUrl.protocol);
+console.log("🔌 DATABASE CONNECTING...");
+console.log("👉 MODE: Postgres-JS");
 console.log("------------------------------------------------");
 
-// 👇 CHANGE 2: Create the client with 'prepare: false'
 const client = postgres(process.env.PG_CONNECTION_STRING, {
-  ssl: 'require',     // Required for Render/Supabase
-  max: 3,             // Limit connections to prevent exhaustion
-  idle_timeout: 20,   // Close idle connections fast to free up slots
+  // ✅ FIX: This tells the driver "Use SSL, but don't crash on self-signed certs"
+  ssl: { rejectUnauthorized: false }, 
   
-  // 🚨 THE CRITICAL FIX 🚨
-  // Supabase's transaction pooler (Supavisor) does not support prepared statements.
-  // This flag tells the driver to strictly use simple queries.
+  // ✅ FIX: This tells Render/Supabase "Don't cache query plans" (Prevents Failed Query error)
   prepare: false,     
+  
+  max: 3,             
+  idle_timeout: 20,   
 });
 
-// 👇 CHANGE 3: Initialize Drizzle with the new client
 export const db = drizzle(client, { 
   schema: { users, userSettings, userProfiles, transactions, behavioralSavings } 
 });
 
 // --- INTERFACE DEFINITION ---
 export interface IStorage {
-  // User & Auth
   getUser(id: string): Promise<User | undefined>;
   getUserByemail(email: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | undefined>;
@@ -56,49 +51,40 @@ export interface IStorage {
   updateUser(id: string, data: Partial<User>): Promise<User>;
   deleteUser(id: string): Promise<void>;
   
-  // Security (OTP)
   generateOTP(userId: string): Promise<string>;
   verifyUser(userId: string, code: string): Promise<boolean>;
   setResetToken(userId: string, token: string, expires: Date): Promise<void>;
 
-  // Profile
   getUserProfile(userId: string): Promise<UserProfile | undefined>;
   createUserProfile(profile: InsertUserProfile): Promise<UserProfile>;
   updateUserProfile(userId: string, profile: Partial<UserProfile>): Promise<UserProfile>;
   getProfileSummary(userId: string): Promise<any>;
   
-  // Settings
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
   createUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
   updateUserSettings(userId: string, settings: Partial<UserSettings>): Promise<UserSettings>;
 
-  // Transactions
   getTransactions(userId: string): Promise<Transaction[]>;
   getRecentTransactions(userId: string, limit: number): Promise<Transaction[]>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   deleteTransaction(id: string): Promise<boolean>;
 
-  // Dashboard (With Date Filtering)
   getDashboardStats(userId: string, period?: string): Promise<{ income: number, expense: number, savings: number }>;
   getWeeklySpendTrend(userId: string, period?: string): Promise<{ name: string, amount: number }[]>;
   getCategoryBreakdown(userId: string, period?: string): Promise<{ name: string, value: number, color: string }[]>;
   
-  // Reports
   getFinancialHistory(userId: string): Promise<{ monthlyData: any[], totalSavings: number }>;
 
-  // Growth & Gamification
   createBehavioralLog(log: InsertBehavioralLog & { userId: string, xpAwarded: number }): Promise<BehavioralLog>;
   getBehavioralLogs(userId: string): Promise<BehavioralLog[]>;
   getBehavioralSummary(userId: string): Promise<any>;
   checkDailyXPCap(userId: string): Promise<boolean>;
   
-  // Leaderboard
   getLeaderboard(): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
 
-  // --- HELPER: Date Filter Logic ---
   private getDateFilter(period: string = '30d') {
     const now = new Date();
     const daysMap: Record<string, number> = {
@@ -137,7 +123,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(id: string): Promise<void> {
-    // Explicit 'any' type for transaction object
     await db.transaction(async (tx: any) => {
        await tx.delete(transactions).where(eq(transactions.userId, id));
        await tx.delete(userSettings).where(eq(userSettings.userId, id));
@@ -229,7 +214,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTransaction(t: InsertTransaction): Promise<Transaction> {
-    // Explicit 'any' type for transaction object
     return await db.transaction(async (tx: any) => {
       const [newTx] = await tx.insert(transactions).values(t).returning();
       
@@ -245,7 +229,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTransaction(id: string): Promise<boolean> {
-    // Explicit 'any' type for transaction object
     return await db.transaction(async (tx: any) => {
       const [txData] = await tx.select().from(transactions).where(eq(transactions.id, id));
       if (!txData) return false;
@@ -300,7 +283,6 @@ export class DatabaseStorage implements IStorage {
 
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const map = new Array(7).fill(0);
-    // Explicitly type 'r' as any
     results.forEach((r: any) => { map[r.day] = Number(r.amount); });
 
     return dayNames.map((name, i) => ({ name, amount: map[i] }));
@@ -323,7 +305,6 @@ export class DatabaseStorage implements IStorage {
     .orderBy(desc(sql`SUM(CAST(${transactions.amount} AS DECIMAL))`));
 
     const COLORS = ["#00D4AA", "#3b82f6", "#ef4444", "#eab308", "#a855f7", "#f97316"];
-    // Explicitly type 'r' as any
     return results.map((r: any, i: number) => ({
       name: r.name,
       value: Number(r.value),
@@ -345,7 +326,6 @@ export class DatabaseStorage implements IStorage {
       ORDER BY sort_key ASC
     `);
 
-    // Explicitly type 'row' as any
     const monthlyData = results.map((row: any) => ({
       month: row.label,
       income: Number(row.income),
@@ -360,7 +340,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   // --- GAMIFICATION & BEHAVIORAL LOGS ---
-  
   async checkDailyXPCap(userId: string): Promise<boolean> {
     const startOfDay = new Date();
     startOfDay.setHours(0,0,0,0);
@@ -439,7 +418,6 @@ export class DatabaseStorage implements IStorage {
     .orderBy(desc(userProfiles.rewardPoints))
     .limit(50);
 
-    // Explicitly type 'u' as any
     return result.map((u: any) => {
       const inc = Number(u.income || 0);
       const exp = Number(u.expense || 0);
