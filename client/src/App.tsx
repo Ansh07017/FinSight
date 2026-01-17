@@ -1,5 +1,6 @@
 // client/src/App.tsx
 
+import { useEffect } from "react"; // 👈 Required to fix the React crash
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -24,11 +25,21 @@ import LeaderBoardPage from "@/pages/leaderboard";
 import VerifyOTP from "@/pages/verifyotp";
 import GrowthPage from "@/pages/growth"; 
 
-// 1. PROTECTED ROUTE WRAPPER
+// 1. PROTECTED ROUTE WRAPPER (Fixed: No crashing)
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  // FIX: Destructure 'onboardingCompleted' directly from useAuth
   const { onboardingCompleted, isLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
+
+  // ✅ FIX: Redirect inside useEffect to satisfy React rules
+  useEffect(() => {
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        setLocation("/auth");
+      } else if (!onboardingCompleted) {
+        setLocation("/onboarding");
+      }
+    }
+  }, [isLoading, isAuthenticated, onboardingCompleted, setLocation]);
 
   if (isLoading) {
     return (
@@ -38,18 +49,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
 
-  if (!isAuthenticated) {
-    setLocation("/auth");
+  // ✅ SECURITY: Render nothing if not allowed
+  if (!isAuthenticated || !onboardingCompleted) {
     return null;
   }
 
-  // FIX: Use the boolean flag from context instead of checking userProfile directly
-  if (!onboardingCompleted) {
-    setLocation("/onboarding");
-    return null;
-  }
-
-  // If all good, render the Layout + Page
   return (
     <Layout>
       <Component />
@@ -60,23 +64,20 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 function AppRouter() {
   return (
     <Switch>
-      {/* 2. PUBLIC ROUTES (No Layout) */}
+      {/* 2. PUBLIC ROUTES */}
       <Route path="/auth" component={AuthPage} />
       <Route path="/resetpassword" component={ResetPassword} />
+      
+      {/* ✅ CORRECT: NO HYPHEN here either */}
       <Route path="/verifyotp" component={VerifyOTP} />
       
-      {/* Onboarding is protected but has its own layout logic usually, 
-          or we can leave it outside the main Layout */}
       <Route path="/onboarding" component={OnboardingPage} />
 
-      {/* 3. PROTECTED ROUTES (Wrapped in Layout via ProtectedRoute) */}
+      {/* 3. PROTECTED ROUTES */}
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/expenses" component={() => <ProtectedRoute component={ExpensesPage} />} />
       <Route path="/reports" component={() => <ProtectedRoute component={ReportsPage} />} />
-      
-      {/* The New Consolidated Page */}
       <Route path="/growth" component={() => <ProtectedRoute component={GrowthPage} />} />
-      
       <Route path="/leaderboard" component={() => <ProtectedRoute component={LeaderBoardPage} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
 

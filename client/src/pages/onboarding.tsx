@@ -86,8 +86,10 @@ export default function OnboardingPage() {
         description: "Your financial dashboard is ready.",
       });
       
-      // 3. Redirect to Dashboard
-      setLocation("/");
+      // 🔴 FIX: FORCE RELOAD to clear the "needsOnboarding" cache
+      // This solves the redirect loop bug instantly.
+      window.location.href = "/";
+
     } catch (error: any) {
       toast({
         variant: "destructive",

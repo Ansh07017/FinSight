@@ -1,6 +1,6 @@
 // client/src/pages/settings.tsx
 
-import { useState } from "react";
+import { useState, useEffect } from "react"; // 👈 ADD useEffect HERE
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -79,17 +79,19 @@ export default function SettingsPage() {
     queryFn: profile.get,
   });
 
-  // Sync state when data loads
-  if (profileResponse?.user && !firstName) {
-      setFirstName(profileResponse.user.firstName || "");
-      setLastName(profileResponse.user.lastName || "");
-      setEmail(profileResponse.user.email || "");
-      setPhone(profileResponse.user.phone || "");
-  }
-  if (profileResponse?.profile && !targetValue) {
-      setGoalType(profileResponse.profile.goalType || "monthly_amount");
-      setTargetValue(profileResponse.profile.targetValue || "");
-  }
+  // ✅ FIX: Wrap state updates in useEffect to stop Infinite Loop
+  useEffect(() => {
+    if (profileResponse?.user) {
+      setFirstName((prev) => prev || profileResponse.user.firstName || "");
+      setLastName((prev) => prev || profileResponse.user.lastName || "");
+      setEmail((prev) => prev || profileResponse.user.email || "");
+      setPhone((prev) => prev || profileResponse.user.phone || "");
+    }
+    if (profileResponse?.profile) {
+      setGoalType((prev) => (prev === "monthly_amount" && profileResponse.profile.goalType ? profileResponse.profile.goalType : prev));
+      setTargetValue((prev) => prev || profileResponse.profile.targetValue || "");
+    }
+  }, [profileResponse]); // Run only when profile data arrives
 
   // 2. MUTATIONS
   const updateSettingsMutation = useMutation({
@@ -188,7 +190,7 @@ export default function SettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-               <div className="flex items-center gap-5 p-4 bg-secondary/20 rounded-xl border border-border/50">
+                <div className="flex items-center gap-5 p-4 bg-secondary/20 rounded-xl border border-border/50">
                     <Avatar className="w-16 h-16 border-2 border-[#00D4AA]/20">
                         <AvatarImage src={getAvatarUrl(profileResponse?.user)} />
                         <AvatarFallback>User</AvatarFallback>
@@ -297,7 +299,7 @@ export default function SettingsPage() {
 
               {/* Toggles */}
               <div className="space-y-5">
-                  {/* EXPENSE ALERTS (COMING SOON) */}
+                  {/* EXPENSE ALERTS */}
                   <div className="flex items-center justify-between opacity-60">
                       <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
@@ -311,9 +313,7 @@ export default function SettingsPage() {
                       <Switch checked={false} disabled={true} />
                   </div>
                   
-                  {/* WEEKLY REPORT REMOVED (Redundant) */}
-
-                  {/* BIOMETRIC LOGIN (APP ONLY) */}
+                  {/* BIOMETRIC LOGIN */}
                   <div className="flex items-center justify-between opacity-60">
                       <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
