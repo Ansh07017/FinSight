@@ -10,6 +10,7 @@ import { createServer } from "http";
 
 const app = express();
 
+// Trust proxy is required for Render/Heroku to get real IP addresses
 app.set("trust proxy", 1);
 
 const httpServer = createServer(app);
@@ -73,10 +74,20 @@ app.use((req, res, next) => {
   // 1. Register API Routes
   await registerRoutes(httpServer, app);
 
-  // 2. Global Error Handler
+  // 2. Global Error Handler (ENHANCED FOR DEBUGGING)
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
+
+    // 🚨 DEBUG: Print the REAL error reason to your terminal 🚨
+    console.error("\n________________________");
+    console.error("🚨 CRITICAL ERROR CAUGHT:");
+    console.error("👉 Message:", message);
+    if (err.code) console.error("👉 PG Code:", err.code); // e.g., 28P01 (Auth), 42P01 (Table Missing)
+    if (err.detail) console.error("👉 Detail:", err.detail);
+    if (err.hint) console.error("👉 Hint:", err.hint);
+    console.error("________________________\n");
+
     res.status(status).json({ message });
   });
 
@@ -88,11 +99,13 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // 4. Start Server (FIXED: Always listen, bind to 0.0.0.0)
+  // 4. Start Server
   const port = parseInt(process.env.PORT || "3000", 10);
-  const host = "0.0.0.0"; // Required for Render/Docker
+  const host = "0.0.0.0"; // Binds to ALL interfaces (Required for Render)
 
   httpServer.listen(port, host, () => {
-    log(`Server running on http://${host}:${port}`);
+    // Custom log to help with Local Development confusion
+    const displayUrl = host === "0.0.0.0" ? "localhost" : host;
+    log(`Server running on http://${displayUrl}:${port}`);
   });
 })();
