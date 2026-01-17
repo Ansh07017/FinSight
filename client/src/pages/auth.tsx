@@ -117,7 +117,7 @@ export default function AuthPage() {
         title: "Verification Required",
         description: "Please check your email for the 6-digit code.",
       });
-      setLocation(`/verify-otp?userId=${response.userId}`);
+      setLocation(`/verifyotp?userId=${response.userId}`);
     } catch (error: any) {
       handleAuthError(error, "Could not create account");
     } finally {
