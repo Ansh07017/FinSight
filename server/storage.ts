@@ -23,8 +23,21 @@ if (!process.env.PG_CONNECTION_STRING) {
   throw new Error("PG_CONNECTION_STRING must be set in environment variables");
 }
 
+// 🔍 ADD THIS DEBUG BLOCK 🔍
+const debugUrl = new URL(process.env.PG_CONNECTION_STRING);
+console.log("------------------------------------------------");
+console.log("🔌 DATABASE CONNECTION DEBUG INFO:");
+console.log("👉 HOST:", debugUrl.hostname);
+console.log("👉 PORT:", debugUrl.port); // <--- This MUST say 5432
+console.log("👉 PROTOCOL:", debugUrl.protocol);
+console.log("👉 PARAMS:", debugUrl.search); // <--- Look for 'pgbouncer=true' here
+console.log("------------------------------------------------");
+
 const pool = new Pool({
   connectionString: process.env.PG_CONNECTION_STRING,
+  ssl: {
+    rejectUnauthorized: false 
+  }
 });
 
 export const db = drizzle(pool, { schema: { 
