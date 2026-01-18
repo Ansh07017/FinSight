@@ -10,7 +10,7 @@
     ]
   },
   "scripts": {
-    "dev": "tsx server/index.ts",
+    "dev": "tsx --env-file=.env server/index.ts",
     "build": "tsx script/build.ts",
     "vercel-build": "npm run build",
     "start": "NODE_ENV=production node dist/index.cjs",
