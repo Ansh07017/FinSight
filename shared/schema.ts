@@ -142,7 +142,8 @@ export const insertUserProfileSchema = createInsertSchema(userProfiles).omit({
 
 export const insertBehavioralSavingsSchema = createInsertSchema(behavioralSavings).omit({ 
   id: true, 
-  loggedAt: true 
+  loggedAt: true,
+  userId: true
 });
 // Export Alias to match routes usage
 export const insertBehavioralLogSchema = insertBehavioralSavingsSchema;

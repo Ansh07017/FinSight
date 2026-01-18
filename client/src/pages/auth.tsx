@@ -86,42 +86,52 @@ export default function AuthPage() {
   };
 
   // 7. LOGIN HANDLER
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!loginEmail || !loginPassword) return;
-    
-    setIsLoading(true);
-    try {
-      const response = await auth.login(loginEmail, loginPassword);
-      if (response?.user) {
-        // Direct flow: Check onboarding -> Redirect
-        const nextPath = response.user.needsOnboarding ? "/onboarding" : "/";
-        setLocation(nextPath);
-      }
-    } catch (error: any) {
-      handleAuthError(error, "Invalid email or password");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  // 8. REGISTER HANDLER
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail || !loginPassword) return;
+    
+    setIsLoading(true); // Start spinner
+    
+    try {
+      const response = await auth.login(loginEmail, loginPassword);
+      
+      if (response?.user) {
+
+        const nextPath = response.user.needsOnboarding ? "/onboarding" : "/";
+        
+        window.location.href = nextPath;  
+      }
+    } catch (error: any) {
+      setIsLoading(false);
+      handleAuthError(error, "Invalid email or password");
+ } 
+    
+ };
+
+ // 8. REGISTER HANDLER (Optimized)
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!registerEmail || !registerPassword) return;
 
-    setIsLoading(true);
+    setIsLoading(true); 
+
     try {
       const response = await auth.register(registerEmail, registerPassword);
+      
+      // ✅ Success! 
       toast({
         title: "Verification Required",
         description: "Please check your email for the 6-digit code.",
       });
+      
       setLocation(`/verifyotp?userId=${response.userId}`);
+
     } catch (error: any) {
+      // ❌ Error! Now we stop the spinner so they can retry.
+      console.error("Registration error:", error);
+      setIsLoading(false); 
       handleAuthError(error, "Could not create account");
-    } finally {
-      setIsLoading(false);
     }
   };
 

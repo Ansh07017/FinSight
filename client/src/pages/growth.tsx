@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Trophy, Zap, Target, TrendingUp, Crown, Shield, 
   Coffee, Utensils, Car, ShoppingBag, Plus, Loader2, Star,
-  Lock, CheckCircle2, CalendarDays, Clock,
+  Lock, CheckCircle2, CalendarDays, Clock,Info,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle,CardDescription } from "@/components/ui/card";
@@ -26,6 +26,13 @@ const TIERS = [
     { name: "The Visionary", minXP: 50000, minDays: 225, color: "text-[#00D4AA]", bg: "bg-[#00D4AA]", icon: Crown }
 ];
 
+const SAVING_PRESETS: Record<string, { coffee: number, transport: number, meal: number, impulse: number }> = {
+  INR: { coffee: 50, transport: 80, meal: 150, impulse: 200 }, // ✅ Your requested Indian standards
+  USD: { coffee: 5, transport: 8, meal: 15, impulse: 25 },     
+  EUR: { coffee: 5, transport: 7, meal: 15, impulse: 22 },     
+  GBP: { coffee: 4, transport: 6, meal: 12, impulse: 20 },     
+};
+   
 // --- 2. HELPERS ---
 const getDaysActive = (createdAt: string | undefined) => {
     if (!createdAt) return 0;
@@ -55,7 +62,7 @@ export default function GrowthPage() {
         queryKey: ["profile-full"],
         queryFn: profile.get,
     });
-
+    
     const { data: statsData } = useQuery({
         queryKey: ["dashboard-stats"],
         queryFn: () => dashboard.getStats("30d"),
@@ -72,6 +79,8 @@ export default function GrowthPage() {
     });
 
     // 5. TIER CALCULATION ENGINE
+    const currencyCode = settingsData?.currency || "INR";
+    const currentPresets = SAVING_PRESETS[currencyCode] || SAVING_PRESETS["INR"];
     const currencySymbol = getCurrencySymbol(settingsData?.currency);
     const profileData = profileResponse?.profile || {};
     const userData = profileResponse?.user || {};
@@ -321,48 +330,43 @@ export default function GrowthPage() {
                         <CardContent className="space-y-6">
                             
                             <div className="grid grid-cols-2 gap-3">
-                                <Button 
-                                    variant="outline" 
-                                    className="h-auto py-4 flex flex-col gap-2 border-border/50 hover:bg-[#00D4AA]/10 hover:border-[#00D4AA] group transition-all"
-                                    onClick={() => handleQuickLog("Skipped Coffee", 250)}
-                                    disabled={logBehaviorMutation.isPending}
-                                >
-                                    <Coffee className="w-6 h-6 text-muted-foreground group-hover:text-[#00D4AA]" />
-                                    <span className="text-xs font-bold">Skipped Coffee</span>
-                                    <span className="text-[10px] text-muted-foreground">+50 XP</span>
-                                </Button>
-                                <Button 
-                                    variant="outline" 
-                                    className="h-auto py-4 flex flex-col gap-2 border-border/50 hover:bg-blue-500/10 hover:border-blue-500 group transition-all"
-                                    onClick={() => handleQuickLog("Dining In", 800)}
-                                    disabled={logBehaviorMutation.isPending}
-                                >
-                                    <Utensils className="w-6 h-6 text-muted-foreground group-hover:text-blue-500" />
-                                    <span className="text-xs font-bold">Cooked at Home</span>
-                                    <span className="text-[10px] text-muted-foreground">+100 XP</span>
-                                </Button>
-                                <Button 
-                                    variant="outline" 
-                                    className="h-auto py-4 flex flex-col gap-2 border-border/50 hover:bg-purple-500/10 hover:border-purple-500 group transition-all"
-                                    onClick={() => handleQuickLog("Public Transport", 150)}
-                                    disabled={logBehaviorMutation.isPending}
-                                >
-                                    <Car className="w-6 h-6 text-muted-foreground group-hover:text-purple-500" />
-                                    <span className="text-xs font-bold">Took Metro/Walk</span>
-                                    <span className="text-[10px] text-muted-foreground">+30 XP</span>
-                                </Button>
-                                <Button 
-                                    variant="outline" 
-                                    className="h-auto py-4 flex flex-col gap-2 border-border/50 hover:bg-orange-500/10 hover:border-orange-500 group transition-all"
-                                    onClick={() => handleQuickLog("Delayed Purchase", 2000)}
-                                    disabled={logBehaviorMutation.isPending}
-                                >
-                                    <ShoppingBag className="w-6 h-6 text-muted-foreground group-hover:text-orange-500" />
-                                    <span className="text-xs font-bold">Delayed Impulse</span>
-                                    <span className="text-[10px] text-muted-foreground">+150 XP</span>
-                                </Button>
-                            </div>
-
+                
+                {/* BUTTON 1: COFFEE (₹50) */}
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-border/50 hover:bg-[#00D4AA]/10 hover:border-[#00D4AA] group transition-all" 
+                        onClick={() => handleQuickLog("Skipped Coffee", currentPresets.coffee)} 
+                        disabled={logBehaviorMutation.isPending}>
+                  <Coffee className="w-6 h-6 text-muted-foreground group-hover:text-[#00D4AA]" />
+                  <span className="text-xs font-bold">Skipped Coffee</span>
+                  <span className="text-[10px] text-muted-foreground">Save {currencySymbol}{currentPresets.coffee} (+50 XP)</span>
+                </Button>
+                
+                {/* BUTTON 2: MEAL (₹150) */}
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-border/50 hover:bg-blue-500/10 hover:border-blue-500 group transition-all" 
+                        onClick={() => handleQuickLog("Cooked at Home", currentPresets.meal)} 
+                        disabled={logBehaviorMutation.isPending}>
+                  <Utensils className="w-6 h-6 text-muted-foreground group-hover:text-blue-500" />
+                  <span className="text-xs font-bold">Cooked at Home</span>
+                  <span className="text-[10px] text-muted-foreground">Save {currencySymbol}{currentPresets.meal} (+100 XP)</span>
+                </Button>
+                
+                {/* BUTTON 3: TRANSPORT (₹80) */}
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-border/50 hover:bg-purple-500/10 hover:border-purple-500 group transition-all" 
+                        onClick={() => handleQuickLog("Took Metro/Walk", currentPresets.transport)} 
+                        disabled={logBehaviorMutation.isPending}>
+                  <Car className="w-6 h-6 text-muted-foreground group-hover:text-purple-500" />
+                  <span className="text-xs font-bold">Took Metro/Walk</span>
+                  <span className="text-[10px] text-muted-foreground">Save {currencySymbol}{currentPresets.transport} (+30 XP)</span>
+                </Button>
+                
+                {/* BUTTON 4: IMPULSE (₹200) */}
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-border/50 hover:bg-orange-500/10 hover:border-orange-500 group transition-all" 
+                        onClick={() => handleQuickLog("Delayed Impulse", currentPresets.impulse)} 
+                        disabled={logBehaviorMutation.isPending}>
+                  <ShoppingBag className="w-6 h-6 text-muted-foreground group-hover:text-orange-500" />
+                  <span className="text-xs font-bold">Delayed Impulse</span>
+                  <span className="text-[10px] text-muted-foreground">Save {currencySymbol}{currentPresets.impulse} (+150 XP)</span>
+                </Button>
+              </div>
                             <div className="space-y-3 pt-4 border-t border-border/30">
                                 <Label className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Custom Save</Label>
                                 <div className="flex gap-2">
@@ -423,6 +427,12 @@ export default function GrowthPage() {
                         </CardContent>
                     </Card>
 
+                </div>
+            </div>
+            <div className="mt-8 pt-6 border-t border-white/10 text-center">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/30 text-xs text-muted-foreground">
+                    <Info className="w-3.5 h-3.5" />
+                    <span>To encourage consistent habits, XP gain is capped at <strong>250 XP per day</strong>. You can still log savings to track your wealth!</span>
                 </div>
             </div>
         </div>

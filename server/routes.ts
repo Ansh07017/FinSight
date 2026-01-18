@@ -384,7 +384,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(await storage.getBehavioralLogs((req.user as any).id));
   });
 
-  app.post("/api/behavioral/savings", requireAuth, async (req, res) => {
+app.post("/api/behavioral/savings", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as any).id;
       
@@ -392,11 +392,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!parseResult.success) return res.status(400).json(parseResult.error);
 
       const { behaviorType, estimatedAmount } = parseResult.data;
-      const amount = parseFloat(estimatedAmount as string);
-
+      
       const multiplier = await calculateEfficiencyMultiplier(userId);
-      let xpEarned = Math.floor((amount * 0.1 + 50) * multiplier);
-      if (xpEarned > 500) xpEarned = 500;
+      
+      let baseXp = 0;
+      switch (behaviorType) {
+          case "Skipped Coffee": baseXp = 50; break;
+          case "Took Metro/Walk": baseXp = 30; break;
+          case "Cooked at Home": baseXp = 100; break;
+          case "Delayed Impulse": baseXp = 150; break;
+          default: baseXp = Math.floor(parseFloat(estimatedAmount as string) * 0.1 + 10); 
+      }
+
+      let xpEarned = Math.floor(baseXp * multiplier);
+
+      if (xpEarned > 250) xpEarned = 250;
 
       const canEarn = await storage.checkDailyXPCap(userId);
       if(!canEarn) xpEarned = 0; 

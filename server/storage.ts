@@ -357,7 +357,7 @@ export class DatabaseStorage implements IStorage {
       gte(behavioralSavings.loggedAt, startOfDay)
     ));
 
-    return Number(result.totalXP) < 500; 
+    return Number(result.totalXP) < 250; 
   }
 
   async createBehavioralLog(log: InsertBehavioralLog & { userId: string, xpAwarded: number }): Promise<BehavioralLog> {
@@ -387,7 +387,7 @@ export class DatabaseStorage implements IStorage {
       habitsLogged: Number(stats?.count || 0),
       potentialWealth: Number(stats?.totalSaved || 0),
       xpToday: Number(stats?.todayXP || 0),
-      dailyCap: 500
+      dailyCap: 250
     };
   }
 
