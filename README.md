@@ -1,7 +1,6 @@
 Finsight 🚀
 Finsight is an intelligent financial companion designed to break the mold of monolithic expense tracking. It offers parallel analytics, real-time behavioral insights, and a reward-based system (B-SAVE) to encourage smarter saving habits.
-Dynamic Link: https://finsight-miov7kyyy-ansh-pratap-singhs-projects-dabd6445.vercel.app/
-
+Dynamic Link: https://finsight-yodo.onrender.com/
 ✨ Features
 Behavioral Savings (B-SAVE): Log smart financial choices (e.g., choosing home-cooked meals over takeout) to earn XP and level up your financial tier.
 
@@ -18,7 +17,7 @@ Frontend: React, TypeScript, Vite, Tailwind CSS v4, Wouter.
 
 Backend: Node.js, Express, Passport.js (Local & Google Strategy).
 
-Database: PostgreSQL (Neon), Drizzle ORM.
+Database: PostgreSQL (SupaBase), Drizzle ORM.
 
 Authentication: Passport.js, Bcrypt.js, Express Session.
 
@@ -84,4 +83,5 @@ BehavioralSavings: XP logs for the B-SAVE engine.
 
 📝 License
 This project is licensed under the MIT License.
+
 
