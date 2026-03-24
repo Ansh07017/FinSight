@@ -1,402 +1,144 @@
-## Finsight 🚀
+<div align="center">
 
-An intelligent financial companion for smarter spending and behavioral savings.
+<img src="https://capsule-render.vercel.app/api?type=waving&color=00D4AA&height=200&section=header&text=FinSight&fontSize=70&fontColor=ffffff&animation=fadeIn&desc=Level%20Up%20Your%20Finances&descAlignY=75" width="100%" />
 
-🌐 **Live App:** https://finsight-yodo.onrender.com/
+# 🚀 FinSight 
 
-✨ **Interactive Animated Documentation**
-👉 [Open Beautiful HTML README](./README.html)
+<p align="center">
+  <i>A gamified financial companion that treats saving money like an RPG. <br> Stop tracking, start leveling up.</i>
+</p>
+
+<a href="https://finsight-yodo.onrender.com/"><img src="https://img.shields.io/badge/🔴_Live_Demo-00D4AA?style=for-the-badge&logoColor=white" alt="Live Demo"/></a>
+<img src="https://img.shields.io/badge/Status-Beta_Live-blue?style=for-the-badge" alt="Status"/>
+<img src="https://img.shields.io/badge/Responsive-Mobile_&_Desktop-purple?style=for-the-badge" alt="Responsive"/>
+
+<br>
+<br>
+
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&pause=1000&color=00D4AA&center=true&vCenter=true&width=435&lines=Save+Money.;Earn+XP.;Unlock+Tiers.;Become+a+Visionary." alt="Typing SVG" />
+
+</div>
 
 ---
 
-## Features
-- Behavioral Savings (B-SAVE)
-- Modular Analytics
-- Dual Authentication
-- Onboarding Flow
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Finsight 🚀</title>
+## ⚠️ Note on Live Demo (Cold Start)
+> **Hosted on Render (Free Tier):** If the app hasn't been used in 15 minutes, the server goes to sleep. **Please allow ~50 seconds for the backend to wake up** on your first visit. Grab a coffee ☕, it will load!
 
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+---
 
-<style>
+## ⚡ Core Features (The B-SAVE Engine)
 
-:root{
---bg:#050505;
---aqua:#00ffd5;
---gold:#d4af37;
---text:#eaeaea;
---card:#0d0d0d;
-}
+FinSight breaks the mold of boring spreadsheets. We use **Behavioral Savings (B-SAVE)** to track the money you *didn't* spend.
 
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-font-family:'Inter',sans-serif;
-}
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="33%">
+      <h3>☕ Skipped Coffee</h3>
+      <p>Save ₹50<br><b>+50 XP</b></p>
+    </td>
+    <td align="center" width="33%">
+      <h3>🚇 Took Metro/Walked</h3>
+      <p>Save ₹80<br><b>+30 XP</b></p>
+    </td>
+    <td align="center" width="33%">
+      <h3>🍳 Cooked at Home</h3>
+      <p>Save ₹150<br><b>+100 XP</b></p>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="3">
+      <h3>🛍️ Delayed Impulse Purchase</h3>
+      <p>Save ₹200 <br><b>+150 XP</b></p>
+    </td>
+  </tr>
+</table>
 
-body{
-background:var(--bg);
-color:var(--text);
-line-height:1.6;
-overflow-x:hidden;
-}
-
-h1,h2,h3{
-font-family:'Orbitron',sans-serif;
-letter-spacing:1px;
-}
-
-.container{
-width:90%;
-max-width:1100px;
-margin:auto;
-padding:60px 0;
-}
-
-header{
-text-align:center;
-padding:120px 0;
-position:relative;
-}
-
-header h1{
-font-size:4rem;
-color:var(--aqua);
-text-shadow:0 0 20px var(--aqua);
-animation: glow 3s infinite alternate;
-}
-
-header p{
-margin-top:20px;
-font-size:1.2rem;
-opacity:.8;
-}
-
-button{
-background:transparent;
-border:2px solid var(--aqua);
-color:var(--aqua);
-padding:12px 28px;
-margin-top:30px;
-cursor:pointer;
-font-weight:500;
-transition:.3s;
-}
-
-button:hover{
-background:var(--aqua);
-color:black;
-box-shadow:0 0 15px var(--aqua);
-}
-
-.gold-line{
-height:2px;
-background:linear-gradient(90deg,transparent,var(--gold),transparent);
-margin:60px 0;
-}
-
-.grid{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
-gap:30px;
-}
-
-.card{
-background:var(--card);
-border:1px solid rgba(212,175,55,.2);
-padding:30px;
-border-radius:10px;
-transition:.4s;
-position:relative;
-overflow:hidden;
-}
-
-.card:hover{
-transform:translateY(-6px);
-box-shadow:0 0 20px rgba(0,255,213,.3);
-}
-
-.card h3{
-color:var(--aqua);
-margin-bottom:10px;
-}
-
-.code{
-background:#0a0a0a;
-border-left:3px solid var(--aqua);
-padding:15px;
-margin-top:15px;
-font-family:monospace;
-overflow:auto;
-}
-
-.tech{
-display:flex;
-flex-wrap:wrap;
-gap:10px;
-margin-top:15px;
-}
-
-.tech span{
-border:1px solid var(--aqua);
-padding:6px 12px;
-border-radius:20px;
-font-size:.85rem;
-}
-
-footer{
-text-align:center;
-padding:40px 0;
-opacity:.7;
-}
-
-@keyframes glow{
-from{ text-shadow:0 0 10px var(--aqua);}
-to{ text-shadow:0 0 30px var(--aqua);}
-}
-
-.fade{
-opacity:0;
-transform:translateY(30px);
-transition:1s;
-}
-
-.fade.show{
-opacity:1;
-transform:translateY(0);
-}
-
-</style>
-</head>
-
-<body>
-
-<header>
-<h1>Finsight 🚀</h1>
-<p>Intelligent Financial Companion with Behavioral Analytics & Smart Saving</p>
-
-<a href="https://finsight-yodo.onrender.com/" target="_blank">
-<button>Open Live App</button>
-</a>
-</header>
-
-<div class="container fade">
-
-<div class="gold-line"></div>
-
-<h2>✨ Features</h2>
-
-<div class="grid">
-
-<div class="card">
-<h3>B-SAVE Behavioral Savings</h3>
-<p>Track smart financial decisions like cooking at home instead of ordering food and earn XP while improving saving habits.</p>
+<div align="center">
+  <p><i>*Daily XP is strictly capped at <b>250 XP</b> to encourage consistent, daily habits rather than spamming!*</i></p>
 </div>
 
-<div class="card">
-<h3>Dual Authentication</h3>
-<p>Secure login using traditional Email/Password or quick Google OAuth 2.0 authentication.</p>
-</div>
+---
 
-<div class="card">
-<h3>Modular Analytics</h3>
-<p>Real-time breakdown of expenses, income streams, and weekly spending behaviour.</p>
-</div>
+## 🏆 The Progression System
 
-<div class="card">
-<h3>Onboarding Flow</h3>
-<p>Custom setup flow to define your financial profile such as student, salaried professional, etc.</p>
-</div>
+As you save and log your behaviors, you rank up through the FinSight Tiers. Your multiplier increases if your savings efficiency (Savings ÷ Income) exceeds 20%.
 
-<div class="card">
-<h3>Persistent Sessions</h3>
-<p>Secure session storage using PostgreSQL with connect-pg-simple for reliability.</p>
-</div>
+| Tier Icon | Rank Name | Requirement | Perk |
+| :---: | :--- | :--- | :--- |
+| ⚡ | **The Spark** | 0 XP | The Journey Begins |
+| 🛡️ | **The Pathfinder** | 2,000 XP & 15 Days | Unlocks Multipliers |
+| ⭐ | **The Strategist** | 10,000 XP & 45 Days | Advanced Analytics |
+| 🏆 | **The Architect** | 25,000 XP & 105 Days | Elite Status |
+| 👑 | **The Visionary** | 50,000 XP & 225 Days | Financial Mastery |
 
-</div>
+---
 
-<div class="gold-line"></div>
+## 🛠️ The Tech Stack
 
-<h2>🛠 Tech Stack</h2>
+Built with modern web standards, focusing on type safety, relational data integrity, and seamless UI/UX.
 
-<div class="grid">
+<table align="center">
+  <tr>
+    <td align="center"><b>Frontend</b></td>
+    <td align="center"><b>Backend</b></td>
+    <td align="center"><b>Database & ORM</b></td>
+    <td align="center"><b>DevOps & Tools</b></td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB" /><br>
+      <img src="https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white" /><br>
+      <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat&logo=tailwind-css&logoColor=white" />
+    </td>
+    <td align="center">
+      <img src="https://img.shields.io/badge/Node.js-43853D?style=flat&logo=node.js&logoColor=white" /><br>
+      <img src="https://img.shields.io/badge/Express.js-404D59?style=flat&logo=express&logoColor=white" /><br>
+      <img src="https://img.shields.io/badge/Passport.js-34E27A?style=flat&logo=passport&logoColor=white" />
+    </td>
+    <td align="center">
+      <img src="https://img.shields.io/badge/PostgreSQL-316192?style=flat&logo=postgresql&logoColor=white" /><br>
+      <img src="https://img.shields.io/badge/Neon_DB-00E599?style=flat&logo=postgresql&logoColor=black" /><br>
+      <img src="https://img.shields.io/badge/Drizzle_ORM-C5F74F?style=flat&logo=drizzle&logoColor=black" /><br>
+      <img src="https://img.shields.io/badge/Zod-3068b7?style=flat&logo=zod&logoColor=white" />
+    </td>
+    <td align="center">
+      <img src="https://img.shields.io/badge/Vite-B73BFE?style=flat&logo=vite&logoColor=FFD62E" /><br>
+      <img src="https://img.shields.io/badge/Render-46E3B7?style=flat&logo=render&logoColor=white" />
+    </td>
+  </tr>
+</table>
 
-<div class="card">
-<h3>Frontend</h3>
-<div class="tech">
-<span>React</span>
-<span>TypeScript</span>
-<span>Vite</span>
-<span>Tailwind CSS</span>
-<span>Wouter</span>
-</div>
-</div>
+---
 
-<div class="card">
-<h3>Backend</h3>
-<div class="tech">
-<span>Node.js</span>
-<span>Express</span>
-<span>Passport.js</span>
-</div>
-</div>
+## 🧠 Key Technical Implementations
 
-<div class="card">
-<h3>Database</h3>
-<div class="tech">
-<span>PostgreSQL</span>
-<span>SupaBase</span>
-<span>Drizzle ORM</span>
-</div>
-</div>
+1. **Dual Authentication:** Implemented `Passport.js` with both Local (Email/Password) and Google OAuth 2.0 strategies, backed by `express-session` and `connect-pg-simple` for persistent database sessions.
+2. **Type-Safe Data Flow:** Used **Drizzle ORM** for defining the Postgres schema and integrated it with **Zod** to validate all incoming HTTP requests before they hit the database.
+3. **Responsive Gamification UI:** Utilized Tailwind CSS Grid and Flexbox to ensure data-heavy financial tables and the "Growth Dashboard" scale perfectly from desktop monitors to mobile phones.
 
-</div>
+---
 
-<div class="gold-line"></div>
+## 💻 Local Installation
 
-<h2>🚀 Getting Started</h2>
+Want to run FinSight on your own machine? 
 
-<div class="card">
-<h3>1. Prerequisites</h3>
+```bash
+# 1. Clone the repository
+git clone [https://github.com/Ansh07017/FinSight.git](https://github.com/Ansh07017/FinSight.git)
+cd FinSight
 
-<div class="code">
-Node.js v18+  
-PostgreSQL database  
-Google Cloud Console account
-</div>
-
-</div>
-
-<br>
-
-<div class="card">
-<h3>2. Environment Variables</h3>
-
-<div class="code">
-PG_CONNECTION_STRING=your_postgresql_url
-SESSION_SECRET=your_secret
-GOOGLE_CLIENT_ID=your_google_id
-GOOGLE_CLIENT_SECRET=your_google_secret
-NODE_ENV=development
-</div>
-
-</div>
-
-<br>
-
-<div class="card">
-<h3>3. Installation</h3>
-
-<div class="code">
+# 2. Install dependencies
 npm install
+
+# 3. Set up environment variables (.env)
+# Create a .env file and add:
+# PG_CONNECTION_STRING=your_neon_db_url
+# SESSION_SECRET=your_secret_key
+# GOOGLE_CLIENT_ID=your_oauth_id
+# GOOGLE_CLIENT_SECRET=your_oauth_secret
+
+# 4. Push database schema using Drizzle
 npx drizzle-kit push
-</div>
 
-</div>
-
-<br>
-
-<div class="card">
-<h3>4. Run the App</h3>
-
-<div class="code">
+# 5. Start the development server
 npm run dev
-npm run build
-</div>
-
-</div>
-
-<div class="gold-line"></div>
-
-<h2>📂 Project Structure</h2>
-
-<div class="card">
-
-<div class="code">
-
-api/                 # Serverless functions  
-client/              # React frontend  
-
-   src/  
-   ├─ components/    # UI components  
-   ├─ pages/         # Dashboard & Auth pages  
-   └─ lib/           # Utilities  
-
-server/              # Express backend  
-shared/              # Shared types  
-drizzle.config.ts    # Database configuration
-
-</div>
-
-</div>
-
-<div class="gold-line"></div>
-
-<h2>🛡 Database Schema</h2>
-
-<div class="grid">
-
-<div class="card">
-<h3>Users</h3>
-<p>Authentication details and Google OAuth IDs.</p>
-</div>
-
-<div class="card">
-<h3>UserProfiles</h3>
-<p>Financial metadata and B-SAVE reward tiers.</p>
-</div>
-
-<div class="card">
-<h3>Transactions</h3>
-<p>Income and expense tracking records.</p>
-</div>
-
-<div class="card">
-<h3>BehavioralSavings</h3>
-<p>XP logs used for the gamified saving engine.</p>
-</div>
-
-</div>
-
-<div class="gold-line"></div>
-
-<h2>📝 License</h2>
-
-<p>This project is licensed under the MIT License.</p>
-
-</div>
-
-<footer>
-<p>Built with 💡 for smarter financial decisions</p>
-</footer>
-
-<script>
-
-const faders=document.querySelectorAll(".fade");
-
-const appearOptions={
-threshold:0.3
-};
-
-const appearOnScroll=new IntersectionObserver(function(entries,appearOnScroll){
-entries.forEach(entry=>{
-if(!entry.isIntersecting)return;
-entry.target.classList.add("show");
-appearOnScroll.unobserve(entry.target);
-});
-},appearOptions);
-
-faders.forEach(fader=>{
-appearOnScroll.observe(fader);
-});
-
-</script>
-
-</body>
-</html>
