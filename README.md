@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=00D4AA&height=200&section=header&text=FinSight&fontSize=70&fontColor=ffffff&animation=fadeIn&desc=Level %2 Up %3 Your %3 Finances &descAlignY=75" width="100%" />
+<img src="https://capsule-render.vercel.app/api?type=waving&color=00D4AA&height=200&section=header&text=FinSight&fontSize=70&fontColor=ffffff&animation=fadeIn&desc=Level%2Up%3Your%3Finances&descAlignY=75" width="100%" />
 
 # 🚀 FinSight 
 
