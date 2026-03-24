@@ -1,7 +1,7 @@
 <div align="center">
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=00D4AA&height=200&section=header&text=FinSight&fontSize=70&fontColor=ffffff&animation=fadeIn&desc=Level%20Up%20Your%20Finances&descAlignY=75" width="100%" />
-# <h1>🚀 FinSight </h1>
+<h1>🚀 FinSight </h1>
 
 <p align="center">
   <i>A gamified financial companion that treats saving money like an RPG. <br> Stop tracking, start leveling up.</i>
